@@ -42,8 +42,7 @@ public void OnPluginStart()
 	{
 		g_iCameraRotation[i] = 0;
 		g_bThirdPersonEnabled[i] = false;
-		g_bUseHardcodedKey
-	[i] = true;
+		g_bUseHardcodedKey[i] = true;
 		g_iLastButtons[i] = 0;
 	}
 
@@ -54,8 +53,7 @@ public void OnClientDisconnect(int client)
 {
 	g_bThirdPersonEnabled[client] = false;
 	g_iCameraRotation[client] = 0;
-	g_bUseHardcodedKey
-[client] = true;
+	g_bUseHardcodedKey[client] = true;
 	g_iLastButtons[client] = 0;
 	
 	SDKUnhook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
@@ -75,8 +73,7 @@ public void OnClientPostThinkPost(int client)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3])
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client] || !g_bUseHardcodedKey
-[client])
+	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client] || !g_bUseHardcodedKey[client])
 		return Plugin_Continue;
 	
 	if (buttons & IN_USE)
@@ -294,12 +291,9 @@ public Action Command_ToggleAutoRotation(int client, int args)
 		return Plugin_Handled;
 	}
 	
-	g_bUseHardcodedKey
-[client] = !g_bUseHardcodedKey
-[client];
+	g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
 	
-	if (g_bUseHardcodedKey
-[client])
+	if (g_bUseHardcodedKey[client])
 	{
 		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffAuto rotation with \x07A082FFE \x07ffffff/ \x07A082FFShift \x07ffffffenabled");
 	}

@@ -12,7 +12,7 @@ char g_sSpecialString[stylestrings_t::sSpecialString];
 
 bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
 int g_iCameraRotation[MAXPLAYERS + 1]; 
-bool g_bAutoRotationEnabled[MAXPLAYERS + 1];
+bool g_bUseHardcodedKey[MAXPLAYERS + 1];
 
 int g_iLastButtons[MAXPLAYERS + 1];
 public Plugin myinfo = {
@@ -30,7 +30,6 @@ public void OnPluginStart()
 	g_cvSpecialString.GetString(g_sSpecialString, sizeof(g_sSpecialString));
 
 	HookEvent("player_spawn", OnPlayerSpawn);
-	HookEvent("player_death", OnPlayerDeath);
 	
 	RegConsoleCmd("sm_tcright", Command_RotateCameraRight, "Rotate camera right");
 	RegConsoleCmd("tcright", Command_RotateCameraRight, "Rotate camera right (bind)");
@@ -43,7 +42,8 @@ public void OnPluginStart()
 	{
 		g_iCameraRotation[i] = 0;
 		g_bThirdPersonEnabled[i] = false;
-		g_bAutoRotationEnabled[i] = true;
+		g_bUseHardcodedKey
+	[i] = true;
 		g_iLastButtons[i] = 0;
 	}
 
@@ -54,7 +54,8 @@ public void OnClientDisconnect(int client)
 {
 	g_bThirdPersonEnabled[client] = false;
 	g_iCameraRotation[client] = 0;
-	g_bAutoRotationEnabled[client] = true;
+	g_bUseHardcodedKey
+[client] = true;
 	g_iLastButtons[client] = 0;
 	
 	SDKUnhook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
@@ -74,7 +75,8 @@ public void OnClientPostThinkPost(int client)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3])
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client] || !g_bAutoRotationEnabled[client])
+	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client] || !g_bUseHardcodedKey
+[client])
 		return Plugin_Continue;
 	
 	if (buttons & IN_USE)
@@ -124,15 +126,6 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
 		CreateTimer(0.5, Timer_ReEnableThirdPerson, GetClientSerial(client));
-	}
-}
-
-public void OnPlayerDeath(Event event, const char[] name, bool dontBroadcast)
-{
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
-	{
-
 	}
 }
 
@@ -301,9 +294,12 @@ public Action Command_ToggleAutoRotation(int client, int args)
 		return Plugin_Handled;
 	}
 	
-	g_bAutoRotationEnabled[client] = !g_bAutoRotationEnabled[client];
+	g_bUseHardcodedKey
+[client] = !g_bUseHardcodedKey
+[client];
 	
-	if (g_bAutoRotationEnabled[client])
+	if (g_bUseHardcodedKey
+[client])
 	{
 		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffAuto rotation with \x07A082FFE \x07ffffff/ \x07A082FFShift \x07ffffffenabled");
 	}

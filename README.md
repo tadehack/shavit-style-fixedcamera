@@ -12,6 +12,12 @@ A SourceMod plugin that adds 90's-inspired tank controls to shavit's Counter-Str
 
 ## Installation
 
+> **⚠️ IMPORTANT NOTICE:**  
+> Add `bash_bypass` to your Tank Controls style specialstring to avoid Bash warnings/bans:
+> ```
+> "specialstring" "tcontrols; bash_bypass"
+> ```
+
 1. **Compile**: `spcomp -iinclude shavit-style-metalgear.sp`
 2. **Install**: Place `.smx` file in `addons/sourcemod/plugins/`
 3. **Configure**: Add style with `"specialstring" "tcontrols"` to Shavit config

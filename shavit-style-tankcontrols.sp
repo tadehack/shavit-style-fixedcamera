@@ -112,7 +112,7 @@ public void OnClientCookiesCached(int client)
 	if (buffer[0] == '\0')
 	{
 	    g_bUseHardcodedKey[client] = true;
-	    g_cToggleTCKeysCookie.Set(client, "1");
+	    g_cToggleTCKeysCookie.Set(client, "0");
 	}
 	else
 	{
@@ -135,8 +135,8 @@ public void OnClientCookiesCached(int client)
 	g_cNvgCookie.Get(client, buffer, sizeof(buffer));
 	if (buffer[0] == '\0')
 	{
-	    g_bNightVisionIsEnabled[client] = true;
-	    g_cNvgCookie.Set(client, "1");
+	    g_bNightVisionIsEnabled[client] = false;
+	    g_cNvgCookie.Set(client, "0");
 	}
 	else
 	{

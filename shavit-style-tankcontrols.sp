@@ -218,7 +218,7 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
-		CreateTimer(0.1, Timer_ReEnableThirdPerson, GetClientSerial(client));
+		CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client));
 	}
 }
 
@@ -228,7 +228,7 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
 		SetIdealViewAngles(client);
-		CreateTimer(0.1, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.03, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 	return Plugin_Stop;
 }
@@ -246,7 +246,7 @@ public Action Timer_SetInitialAngles(Handle timer, int serial)
 	
 	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
 	
-	CreateTimer(0.1, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.03, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	
 	return Plugin_Stop;
 }
@@ -301,7 +301,7 @@ void EnableThirdPerson(int client)
 	g_iCameraRotation[client] = 0;
 
 	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
-	CreateTimer(0.1, Timer_SetInitialAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.05, Timer_SetInitialAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffUse \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffType \x07A082FF/tchelp \x07ffffffto see additional commands");
@@ -344,7 +344,7 @@ public Action Command_RotateCameraRight(int client, int args)
 	
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
 	TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
-	CreateTimer(0.1, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.03, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	
 	return Plugin_Handled;
 }
@@ -369,7 +369,7 @@ public Action Command_RotateCameraLeft(int client, int args)
 	
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
 	TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
-	CreateTimer(0.1, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.03, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	
 	return Plugin_Handled;
 }

@@ -61,7 +61,14 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_tcfov", Command_ApplyFOV, "Apply User Inserted FOV");
 	RegConsoleCmd("sm_fov", Command_ApplyFOV, "Apply User Inserted FOV");
 
-	RegConsoleCmd("sm_tchelp", Command_TcHelp, "Displays additional commands for Tank Controls");
+	RegConsoleCmd("sm_tchelp", Command_TcHelp, "Open Tank Controls commands & help menu");
+
+	// Menu commands
+	RegConsoleCmd("sm_tcsettings", Command_TcMenu, "Open Tank Controls settings menu");
+	RegConsoleCmd("sm_tcoptions", Command_TcMenu, "Open Tank Controls settings menu");
+	RegConsoleCmd("sm_tcmenu", Command_TcMenu, "Open Tank Controls settings menu");
+
+	RegConsoleCmd("sm_tccommands", Command_TcHelp, "Open Tank Controls commands & help menu");
 
 	// Cookies
 	g_cToggleTCKeysCookie = new Cookie("Toggle_TCKeys", "Toggle Hardcoded binds state", CookieAccess_Protected);
@@ -472,10 +479,7 @@ public Action Command_TcHelp(int client, int args)
 	if (!IsInTCStyle(client))
 		return Plugin_Handled;
 	
-	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffUse \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
-	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffYou can bind a key to \x07A082FFtcleft \x07ffffff/ \x07A082FFtcright \x07ffffffto rotate the camera");
-	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffType \x07A082FF/tcfov \x07ffffffto change the Field of View");
-	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffType \x07A082FF/tcnvg \x07ffffffto toggle Night Vision!");
+	ShowHelpMenu(client);
 
 	return Plugin_Handled;
 }
@@ -491,4 +495,196 @@ public bool IsInTCStyle(int client)
 		return true;
 	else
 		return false;
+}
+
+// Helper function to save cookie settings
+void SaveCookieSetting(Cookie cookie, int client, int value)
+{
+	char buffer[8];
+	Format(buffer, sizeof(buffer), "%d", value);
+	cookie.Set(client, buffer);
+}
+
+// Menu Functions
+public Action Command_TcMenu(int client, int args)
+{
+	if (client == 0)
+		return Plugin_Handled;
+
+	if (!IsInTCStyle(client))
+	{
+		Shavit_PrintToChat(client, "\x07ffffffThis command is only available in the \x07A082FFTank Controls \x07ffffffstyle");
+		return Plugin_Handled;
+	}
+
+	ShowMainMenu(client);
+	return Plugin_Handled;
+}
+
+void ShowMainMenu(int client)
+{
+	Menu menu = new Menu(MainMenuHandler, MENU_ACTIONS_DEFAULT);
+	menu.SetTitle("Tank Controls Menu\n \n");
+	
+	char bindStatus[32];
+	Format(bindStatus, sizeof(bindStatus), "Shift / E Binds: %s", g_bUseHardcodedKey[client] ? "On" : "Off");
+	menu.AddItem("binds", bindStatus);
+	
+	char nvgStatus[32];
+	Format(nvgStatus, sizeof(nvgStatus), "Night Vision: %s", g_bNightVisionIsEnabled[client] ? "On" : "Off");
+	menu.AddItem("nvg", nvgStatus);
+	
+	menu.AddItem("fov", "FOV\n \n");
+
+	menu.AddItem("help", "Commands & Help");
+	
+	menu.ExitButton = true;
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int MainMenuHandler(Menu menu, MenuAction action, int param1, int param2)
+{
+	switch(action)
+	{
+		case MenuAction_Select:
+		{
+			char info[32];
+			menu.GetItem(param2, info, sizeof(info));
+			
+			if (StrEqual(info, "binds"))
+			{
+				g_bUseHardcodedKey[param1] = !g_bUseHardcodedKey[param1];
+				SaveCookieSetting(g_cToggleTCKeysCookie, param1, g_bUseHardcodedKey[param1]);
+				ShowMainMenu(param1);
+			}
+			else if (StrEqual(info, "nvg"))
+			{
+				g_bNightVisionIsEnabled[param1] = !g_bNightVisionIsEnabled[param1];
+				SetEntProp(param1, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[param1] ? 1 : 0);
+				SaveCookieSetting(g_cNvgCookie, param1, g_bNightVisionIsEnabled[param1]);
+				ShowMainMenu(param1);
+			}
+			else if (StrEqual(info, "fov"))
+			{
+				ShowFovMenu(param1);
+			}
+			else if (StrEqual(info, "help"))
+			{
+				ShowHelpMenu(param1);
+			}
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+	
+	return 0;
+}
+
+void ShowFovMenu(int client)
+{
+	Menu menu = new Menu(FovMenuHandler, MENU_ACTIONS_DEFAULT);
+	
+	char title[64];
+	Format(title, sizeof(title), "Tank Controls Menu | FOV\n \nCurrent FOV: %d\n ", g_iFov[client]);
+	menu.SetTitle(title);
+	
+	menu.AddItem("increase", "++");
+	menu.AddItem("decrease", "--\n \n");
+	menu.AddItem("back", "Back");
+	
+	menu.ExitButton = true;
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+void ShowHelpMenu(int client)
+{
+    Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
+    menu.SetTitle("Tank Controls | Commands & Help\n \n");
+    
+    menu.AddItem("", "CAMERA: Shift/E or bind tcleft/tcright", ITEMDRAW_DISABLED);
+    menu.AddItem("", "MENU: /tcmenu", ITEMDRAW_DISABLED);
+    menu.AddItem("", "FOV: /tcfov 80-120", ITEMDRAW_DISABLED);
+    menu.AddItem("", "NIGHT VISION: /tcnvg", ITEMDRAW_DISABLED);
+    menu.AddItem("", "TOGGLE KEYS: /toggletckeys\n \n", ITEMDRAW_DISABLED);
+    menu.AddItem("mainmenu", "Main Menu");
+    menu.ExitButton = true;
+    menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int FovMenuHandler(Menu menu, MenuAction action, int param1, int param2)
+{
+	switch(action)
+	{
+		case MenuAction_Select:
+		{
+			char info[32];
+			menu.GetItem(param2, info, sizeof(info));
+			
+			if (StrEqual(info, "increase"))
+			{
+				if (g_iFov[param1] < 120)
+				{
+					g_iFov[param1] += 5;
+					SaveCookieSetting(g_cFovCookie, param1, g_iFov[param1]);
+					
+					// Apply FOV if in third person
+					if (g_bThirdPersonEnabled[param1])
+					{
+						SetEntProp(param1, Prop_Send, "m_iFOV", g_iFov[param1]);
+					}
+				}
+				ShowFovMenu(param1);
+			}
+			else if (StrEqual(info, "decrease"))
+			{
+				if (g_iFov[param1] > 80)
+				{
+					g_iFov[param1] -= 5;
+					SaveCookieSetting(g_cFovCookie, param1, g_iFov[param1]);
+					
+					// Apply FOV if in third person
+					if (g_bThirdPersonEnabled[param1])
+					{
+						SetEntProp(param1, Prop_Send, "m_iFOV", g_iFov[param1]);
+					}
+				}
+				ShowFovMenu(param1);
+			}
+			else if (StrEqual(info, "back"))
+			{
+				ShowMainMenu(param1);
+			}
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+	
+	return 0;
+}
+
+public int HelpMenuHandler(Menu menu, MenuAction action, int param1, int param2)
+{
+	switch(action)
+	{
+		case MenuAction_Select:
+		{
+			char sInfo[32];
+			menu.GetItem(param2, sInfo, sizeof(sInfo));
+			
+			if (StrEqual(sInfo, "mainmenu"))
+			{
+				ShowMainMenu(param1);
+			}
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+	
+	return 0;
 }

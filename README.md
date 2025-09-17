@@ -1,14 +1,20 @@
-# Shavit Tank Controls CS:S Bhop Style
+<div align="center">
+  <h1><code>Shavit Tank Controls</code></h1>
+  <p>
+    <strong>90's-inspired tank controls for shavit's CS:S bhop timer with fixed third-person camera rotation</strong>
+  </p>
+</div>
 
-A SourceMod plugin that adds 90's-inspired tank controls to shavit's Counter-Strike: Source bhop timer with fixed third-person camera rotation.
+---
 
 ## Features
 
 - **Third-person camera** with 4-way rotation (behind/left/front/right)
-- **Automatic binded controls**: E/Shift keys rotate camera
-- **Manual commands**: `tcright`/`tcleft` for precise control
-- **Toggle system**: Switch between auto and manual modes
-- **Shavit integration**: Seamless timer system integration
+- **Automatic binds**: E/Shift keys rotate camera (toggleable)
+- **Manual commands**: If you don't like the default keybinds you can bind `tcleft` / `tcright` to any button you want to rotate the camera
+- **Interactive settings menu**: Change FOV, toggle binds and night vision directly in the menu
+- **Quick commands**: All commands accessible in-game
+- **Shavit integration**: Seamless with shavit-timer system
 
 ## Installation
 
@@ -18,27 +24,49 @@ A SourceMod plugin that adds 90's-inspired tank controls to shavit's Counter-Str
 > "specialstring" "tcontrols; bash_bypass"
 > ```
 
-1. **Compile**: `spcomp -iinclude shavit-style-metalgear.sp`
-2. **Install**: Place `.smx` file in `addons/sourcemod/plugins/`
-3. **Configure**: Add style with `"specialstring" "tcontrols"` to Shavit config
-4. **Restart server**
+1. **Compile**: `spcomp -include shavit-style-tankcontrols.sp`
+2. **Install**: Place the compiled `.smx` in `addons/sourcemod/plugins/`
+3. **Configure**: Add your style with `"specialstring" "tcontrols"` in your Shavit config
+4. **Restart your server**
 
 ## Commands & Controls
 
-| Command | Key | Description |
-|---------|-----|-------------|
- `+use` | **E** | Rotate camera right
- `+speed` | **Shift** | Rotate camera left
- `tcright` | - | Rotate camera right |
-| `tcleft` | - | Rotate camera left |
-| `toggletckeys` | - | Toggle auto-binded rotation on/off |
+| Command         | Key/Usage      | Description                              |
+|-----------------|---------------|------------------------------------------|
+| `/tcmenu`       | -             | Open the Tank Controls settings menu     |
+| `/tcsettings`   | -             | Alias for `/tcmenu`                      |
+| `/tcoptions`    | -             | Alias for `/tcmenu`                      |
+| `/tccommands`   | -             | Show all Tank Controls commands     |
+| `/tchelp`       | -             | Alias for `/tccommands`                  |
+| `tcright`       | -             | Rotate camera right                      |
+| `tcleft`        | -             | Rotate camera left                       |
+| `toggletckeys`  | -             | Toggle auto-binded rotation on/off       |
+| `/tcfov <val>`  | -             | Set camera FOV (80-120)                  |
+| `/tcnvg`        | -             | Toggle night vision                      |
+| `+speed`        | **Shift**     | Rotate camera left (if enabled)          |
+| `+use`          | **E**         | Rotate camera right (if enabled)         |
+
 
 ## Usage
 
-1. Select **Tank Controls** style in `!style` menu
+1. Select **Tank Controls** style in the `!style` menu
 2. Camera switches to third-person automatically
-3. Use **E/Shift** or manual commands to rotate
-4. Use `toggletckeys` to switch between auto/manual modes
+3. Use **Shift/E** or manual commands to rotate the camera
+4. Use `/tcmenu` for all settings (FOV, binds, night vision, etc.)
+5. Use `/tchelp` for a quick in-game reference of all commands
+
+## Menu System
+
+- **Settings Menu**:  
+  - Toggle Shift/E binds  
+  - Toggle night vision  
+  - Adjust FOV (80-120)  
+  - Access commands
+
+- **Commands Menu**:  
+  - Shows all available commands  
+  - Accessible via `/tchelp` or `/tccommands`
+
 
 ## Requirements
 
@@ -48,10 +76,13 @@ A SourceMod plugin that adds 90's-inspired tank controls to shavit's Counter-Str
 
 ## Troubleshooting
 
-- **Camera not activating**: Check style has `"specialstring" "tcontrols"`
+- **Camera not activating**:  
+  Ensure your style has `"specialstring" "tcontrols"` in the Shavit config.
 
-- **Keys not working**: Use `toggletckeys` or try manual commands
+- **Keys not working**:  
+  Use `/toggletckeys` or try manual commands (`tcright`, `tcleft`).
 
-- **Can't switch weapons**: This is due to the third-person implementation that uses the Spectator Camera to simulate third-person, unless the camera implementation is changed, this can't be fixed.
+- **Can't switch weapons**:  
+  This is a limitation of the third-person implementation, which uses the Spectator Camera. Unless the camera system is changed, this can't be fixed.
 
 ---

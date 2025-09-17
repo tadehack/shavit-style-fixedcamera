@@ -68,11 +68,34 @@
   - Accessible via `/tchelp` or `/tccommands`
 
 
+## Configuration Example
+
+Add to your `shavit-styles.cfg`:
+
+```json
+"TankControls"
+{
+    "name"              "Tank Controls"
+    "shortname"         "TANK"
+    "htmlcolor"         "FFFFFF"
+    "specialstring"     "tcontrols"
+    // ... other style settings
+}
+```
+
+## ConVars
+
+| ConVar                        | Default       | Description                    |
+|-------------------------------|---------------|--------------------------------|
+| `ss_tankcontrols_specialstring` | `tcontrols` | Special string for style detection |
+
 ## Requirements
 
 - SourceMod 1.10+
 - Shavit Timer
 - Counter-Strike: Source
+- SDKHooks extension
+- ClientPrefs extension
 
 ## Troubleshooting
 

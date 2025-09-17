@@ -15,6 +15,8 @@ int g_iCameraRotation[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
 int g_iFov[MAXPLAYERS + 1];
 
+float g_storedAngles[MAXPLAYERS + 1][3];
+
 bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
 bool g_bUseHardcodedKey[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
@@ -28,7 +30,7 @@ public Plugin myinfo = {
 	name = "Shavit - Tank Controls Style",
 	author = "devins, shinoum", 
 	description = "Tank-style thirdperson camera style for CS:S Bhop Timer",
-	version = "1.1.0",
+	version = "1.1.2",
 	url = "https://github.com/NSchrot/shavit-style-tankcontrols"
 }
 
@@ -175,7 +177,10 @@ public void OnClientPostThinkPost(int client)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3])
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client] || !g_bUseHardcodedKey[client])
+	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+		return Plugin_Continue;
+
+	if (!g_bUseHardcodedKey[client])
 		return Plugin_Continue;
 	
 	if (buttons & IN_USE)
@@ -277,6 +282,8 @@ public Action Timer_ActivateThirdPerson(Handle timer, int serial)
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
 	SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 	SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+
+	RestoreLookAngles(client);
 	
 	return Plugin_Stop;
 }
@@ -290,6 +297,8 @@ public Action Timer_SimpleRefresh(Handle timer, int serial)
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
 	SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 	SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+
+	RestoreLookAngles(client);
 	
 	return Plugin_Stop;
 }
@@ -335,6 +344,8 @@ public Action Command_RotateCameraRight(int client, int args)
 {
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Handled;
+
+	StoreLookAngles(client);
 	
 	switch(g_iCameraRotation[client])
 	{
@@ -352,7 +363,7 @@ public Action Command_RotateCameraRight(int client, int args)
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
 	TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
 	CreateTimer(0.03, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-	
+
 	return Plugin_Handled;
 }
 
@@ -360,6 +371,8 @@ public Action Command_RotateCameraLeft(int client, int args)
 {
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Handled;
+
+	StoreLookAngles(client);
 
 	switch(g_iCameraRotation[client])
 	{
@@ -377,8 +390,24 @@ public Action Command_RotateCameraLeft(int client, int args)
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
 	TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
 	CreateTimer(0.03, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-	
+
 	return Plugin_Handled;
+}
+
+public void StoreLookAngles(int client)
+{
+    if(!IsValidClient(client))
+        return;
+
+    GetClientEyeAngles(client, g_storedAngles[client]);
+}
+
+public void RestoreLookAngles(int client)
+{
+    if(!IsValidClient(client))
+        return;
+
+    TeleportEntity(client, NULL_VECTOR, g_storedAngles[client], NULL_VECTOR);
 }
 
 public Action Command_ToggleHardCodedBinds(int client, int args)
@@ -398,11 +427,11 @@ public Action Command_ToggleHardCodedBinds(int client, int args)
 	
 	if (g_bUseHardcodedKey[client])
 	{
-		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffHardcoded camera rotation binds: \x078efeffOn");
+		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffShift / E camera rotation binds: \x078efeffOn");
 	}
 	else
 	{
-		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffHardcoded camera rotation binds: \x07A082FFOff");
+		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffShift / E camera rotation binds: \x07A082FFOff");
 	}
 	
 	return Plugin_Handled;
@@ -446,6 +475,8 @@ public Action Command_ApplyFOV(int client, int args)
 		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffCurrent FOV: \x07A082FF%i \x07ffffff(Default: 105 | Game Default: 90)", g_iFov[client]);
 		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffUsage: /tcfov \x07A082FF<value>");
 		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07A082FFChanging the FOV affects mouse sensitivity!");
+		ShowFovMenu(client);
+		
 		return Plugin_Handled;
 	}
 
@@ -524,7 +555,7 @@ public Action Command_TcMenu(int client, int args)
 void ShowMainMenu(int client)
 {
 	Menu menu = new Menu(MainMenuHandler, MENU_ACTIONS_DEFAULT);
-	menu.SetTitle("Tank Controls Menu\n \n");
+	menu.SetTitle("Tank Controls\n \n");
 	
 	char bindStatus[32];
 	Format(bindStatus, sizeof(bindStatus), "Shift / E Binds: %s", g_bUseHardcodedKey[client] ? "On" : "Off");
@@ -587,7 +618,7 @@ void ShowFovMenu(int client)
 	Menu menu = new Menu(FovMenuHandler, MENU_ACTIONS_DEFAULT);
 	
 	char title[64];
-	Format(title, sizeof(title), "Tank Controls Menu | FOV\n \nCurrent FOV: %d\n ", g_iFov[client]);
+	Format(title, sizeof(title), "Tank Controls | FOV\n \nCurrent FOV: %d\n ", g_iFov[client]);
 	menu.SetTitle(title);
 	
 	menu.AddItem("increase", "++");
@@ -601,13 +632,17 @@ void ShowFovMenu(int client)
 void ShowHelpMenu(int client)
 {
     Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
-    menu.SetTitle("Tank Controls | Commands & Help\n \n");
+    menu.SetTitle("Tank Controls | Commands / Help\n \n");
     
-    menu.AddItem("", "CAMERA: Shift/E or bind tcleft/tcright", ITEMDRAW_DISABLED);
-    menu.AddItem("", "MENU: /tcmenu", ITEMDRAW_DISABLED);
-    menu.AddItem("", "FOV: /tcfov 80-120", ITEMDRAW_DISABLED);
-    menu.AddItem("", "NIGHT VISION: /tcnvg", ITEMDRAW_DISABLED);
-    menu.AddItem("", "TOGGLE KEYS: /toggletckeys\n \n", ITEMDRAW_DISABLED);
+    menu.AddItem("", "Camera Angle: Shift / E or bind a key to tcleft / tcright\n \n", ITEMDRAW_DISABLED);
+
+	menu.AddItem("", "/toggletckeys: Toggle Shift / E binds", ITEMDRAW_DISABLED);
+    menu.AddItem("", "/tcnvg: Toggle Night Vision", ITEMDRAW_DISABLED);
+	menu.AddItem("", "/tcfov: Adjust FOV (80-120)\n \n", ITEMDRAW_DISABLED);
+
+	menu.AddItem("", "/tcmenu: Main Menu", ITEMDRAW_DISABLED);
+	menu.AddItem("", "/tchelp: This Menu\n \n", ITEMDRAW_DISABLED);
+
     menu.AddItem("mainmenu", "Main Menu");
     menu.ExitButton = true;
     menu.Display(client, MENU_TIME_FOREVER);

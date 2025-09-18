@@ -38,11 +38,11 @@
 | `/tcoptions`    | -             | Alias for `/tcmenu`                      |
 | `/tccommands`   | -             | Show all Tank Controls commands     |
 | `/tchelp`       | -             | Alias for `/tccommands`                  |
+| `/tcfov <val>`  | -             | Set camera FOV (80-120)                  |
+| `/tcnvg`        | -             | Toggle night vision                      |
 | `tcright`       | -             | Rotate camera right                      |
 | `tcleft`        | -             | Rotate camera left                       |
 | `toggletckeys`  | -             | Toggle auto-binded rotation on/off       |
-| `/tcfov <val>`  | -             | Set camera FOV (80-120)                  |
-| `/tcnvg`        | -             | Toggle night vision                      |
 | `+speed`        | **Shift**     | Rotate camera left (if enabled)          |
 | `+use`          | **E**         | Rotate camera right (if enabled)         |
 
@@ -107,5 +107,6 @@ Add to your `shavit-styles.cfg`:
 
 - **Can't switch weapons**:  
   This is a limitation of the third-person implementation, which uses the Spectator Camera. Unless the camera system is changed, this can't be fixed.
+
 
 ---

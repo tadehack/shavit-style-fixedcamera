@@ -30,7 +30,7 @@ public Plugin myinfo = {
 	name = "Shavit - Tank Controls Style",
 	author = "devins, shinoum", 
 	description = "Tank-style thirdperson camera style for CS:S Bhop Timer",
-	version = "1.1.2",
+	version = "1.1.3",
 	url = "https://github.com/NSchrot/shavit-style-tankcontrols"
 }
 
@@ -48,29 +48,33 @@ public void OnPluginStart()
 	RegConsoleCmd("tcnvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 	RegConsoleCmd("toggletckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 
-	// SM commands
+	// SM commands:
+
+	// Nightvision
 	RegConsoleCmd("sm_tcnightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 	RegConsoleCmd("sm_nightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 	RegConsoleCmd("sm_tcnvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 	RegConsoleCmd("sm_nvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 	RegConsoleCmd("sm_nv", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 
+	// Toggle Shift / E Keys
 	RegConsoleCmd("sm_toggletckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_usetckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_usehckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_tckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 
+	// Field of View
 	RegConsoleCmd("sm_tcfov", Command_ApplyFOV, "Apply User Inserted FOV");
 	RegConsoleCmd("sm_fov", Command_ApplyFOV, "Apply User Inserted FOV");
 
+	// Commands & Help
+	RegConsoleCmd("sm_tccommands", Command_TcHelp, "Open Tank Controls commands & help menu");
 	RegConsoleCmd("sm_tchelp", Command_TcHelp, "Open Tank Controls commands & help menu");
 
-	// Menu commands
+	// Main Menu
 	RegConsoleCmd("sm_tcsettings", Command_TcMenu, "Open Tank Controls settings menu");
 	RegConsoleCmd("sm_tcoptions", Command_TcMenu, "Open Tank Controls settings menu");
 	RegConsoleCmd("sm_tcmenu", Command_TcMenu, "Open Tank Controls settings menu");
-
-	RegConsoleCmd("sm_tccommands", Command_TcHelp, "Open Tank Controls commands & help menu");
 
 	// Cookies
 	g_cToggleTCKeysCookie = new Cookie("Toggle_TCKeys", "Toggle Hardcoded binds state", CookieAccess_Protected);
@@ -95,13 +99,7 @@ public void OnClientPutInServer(int client)
 {
     OnClientCookiesCached(client);
 
-	int style = Shavit_GetBhopStyle(client);
-    char sStyleSpecial[sizeof(stylestrings_t::sSpecialString)];
-	Shavit_GetStyleStrings(style, sSpecialString, sStyleSpecial, sizeof(sStyleSpecial));
-
-    bool isInTCStyle = (StrContains(sStyleSpecial, g_sSpecialString) != -1);
-
-    if (isInTCStyle)
+    if (IsInTCStyle(client))
 	{
 		g_iCameraRotation[client] = 0;
 		g_iLastButtons[client] = 0;
@@ -155,12 +153,8 @@ public void OnClientCookiesCached(int client)
 
 public void OnClientDisconnect(int client)
 {
-	g_bThirdPersonEnabled[client] = false;
-	g_iCameraRotation[client] = 0;
-	g_bUseHardcodedKey[client] = true;
-	g_iLastButtons[client] = 0;
-	
-	SDKUnhook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
+	if (g_bThirdPersonEnabled[client])
+		DisableThirdPerson(client);
 }
 
 // fix for fov being reset after dropping or picking up a weapon
@@ -175,28 +169,28 @@ public void OnClientPostThinkPost(int client)
 	}
 }
 
+public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+		CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client));
+}
+
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3])
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client] || !g_bUseHardcodedKey[client])
 		return Plugin_Continue;
 
-	if (!g_bUseHardcodedKey[client])
-		return Plugin_Continue;
-	
 	if (buttons & IN_USE)
 	{
 		if (!(g_iLastButtons[client] & IN_USE))
-		{
 			Command_RotateCameraRight(client, 0);
-		}
 	}
 	
 	if (buttons & IN_SPEED)
 	{
 		if (!(g_iLastButtons[client] & IN_SPEED))
-		{
 			Command_RotateCameraLeft(client, 0);
-		}
 	}
 
 	g_iLastButtons[client] = buttons;
@@ -225,21 +219,13 @@ public void Shavit_OnStyleChanged(int client, int oldstyle, int newstyle, int tr
     }
 }
 
-public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
-{
-	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
-	{
-		CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client));
-	}
-}
-
+// Timers -----------------------------------------------------------------
 public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
-		SetIdealViewAngles(client);
+		SetViewAngles(client);
 		CreateTimer(0.03, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 	return Plugin_Stop;
@@ -248,29 +234,13 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 public Action Timer_SetInitialAngles(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-		return Plugin_Stop;
-	
-	float idealAngles[3];
-	idealAngles[0] = 45.0;
-	idealAngles[1] = float(g_iCameraRotation[client]);
-	idealAngles[2] = 0.0;
-	
-	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
-	
-	CreateTimer(0.03, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	{
+		SetViewAngles(client);
+		CreateTimer(0.03, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	}
 	
 	return Plugin_Stop;
-}
-
-void SetIdealViewAngles(int client)
-{
-	float idealAngles[3];
-	idealAngles[0] = 45.0;
-	idealAngles[1] = float(g_iCameraRotation[client]); 
-	idealAngles[2] = 0.0;  
-	
-	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
 }
 
 public Action Timer_ActivateThirdPerson(Handle timer, int serial)
@@ -301,6 +271,16 @@ public Action Timer_SimpleRefresh(Handle timer, int serial)
 	RestoreLookAngles(client);
 	
 	return Plugin_Stop;
+}
+
+void SetViewAngles(int client)
+{
+	float idealAngles[3];
+	idealAngles[0] = 45.0;
+	idealAngles[1] = float(g_iCameraRotation[client]); 
+	idealAngles[2] = 0.0;  
+	
+	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
 }
 
 public void ConVar_OnSpecialStringChanged(ConVar convar, const char[] oldValue, const char[] newValue)

@@ -7,9 +7,15 @@
 #include <shavit>
 #include <clientprefs>
 
-// Global Variables
+// Global Variables -------------------------------------------------------
+
 ConVar g_cvSpecialString;
+
 char g_sSpecialString[stylestrings_t::sSpecialString];
+
+bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
+bool g_bUseHardcodedKey[MAXPLAYERS + 1];
+bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 
 int g_iCameraRotation[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
@@ -17,14 +23,11 @@ int g_iFov[MAXPLAYERS + 1];
 
 float g_storedAngles[MAXPLAYERS + 1][3];
 
-bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
-bool g_bUseHardcodedKey[MAXPLAYERS + 1];
-bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
-
-// Cookies
 Cookie g_cToggleTCKeysCookie;
 Cookie g_cFovCookie;
 Cookie g_cNvgCookie;
+
+// Plugin Info -----------------------------------------------------------
 
 public Plugin myinfo = {
 	name = "Shavit - Tank Controls Style",
@@ -34,6 +37,8 @@ public Plugin myinfo = {
 	url = "https://github.com/NSchrot/shavit-style-tankcontrols"
 }
 
+// Plugin Starts ---------------------------------------------------------
+
 public void OnPluginStart()
 {
 	g_cvSpecialString = CreateConVar("ss_tankcontrols_specialstring", "tcontrols", "Special string for Tank Controls style detection");
@@ -42,13 +47,14 @@ public void OnPluginStart()
 
 	HookEvent("player_spawn", OnPlayerSpawn);
 
-	// Commands
+	// Commands ---------
+
 	RegConsoleCmd("tcright", Command_RotateCameraRight, "Rotate camera right");
 	RegConsoleCmd("tcleft", Command_RotateCameraLeft, "Rotate camera left");
 	RegConsoleCmd("tcnvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 	RegConsoleCmd("toggletckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 
-	// SM commands:
+	// SM commands ------
 
 	// Nightvision
 	RegConsoleCmd("sm_tcnightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
@@ -76,7 +82,8 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_tcoptions", Command_TcMenu, "Open Tank Controls settings menu");
 	RegConsoleCmd("sm_tcmenu", Command_TcMenu, "Open Tank Controls settings menu");
 
-	// Cookies
+	// Cookies ---------
+
 	g_cToggleTCKeysCookie = new Cookie("Toggle_TCKeys", "Toggle Hardcoded binds state", CookieAccess_Protected);
 	g_cFovCookie = new Cookie("fov", "fov state", CookieAccess_Protected);
 	g_cNvgCookie = new Cookie("nvg", "nvg state", CookieAccess_Protected);
@@ -94,6 +101,8 @@ public void OnPluginStart()
 
 	AutoExecConfig();
 }
+
+// Ons -------------------------------------------------------------------------------------
 
 public void OnClientPutInServer(int client)
 {
@@ -164,9 +173,7 @@ public void OnClientPostThinkPost(int client)
 		return;
 		
 	if (GetEntProp(client, Prop_Send, "m_iFOV") != g_iFov[client])
-	{
 		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
-	}
 }
 
 public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -198,6 +205,8 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 	return Plugin_Continue;
 }
 
+// Style Changed ---------------------------------------------------------------------------
+
 public void Shavit_OnStyleChanged(int client, int oldstyle, int newstyle, int track, bool manual)
 {
     if (!IsValidClient(client))
@@ -219,59 +228,41 @@ public void Shavit_OnStyleChanged(int client, int oldstyle, int newstyle, int tr
     }
 }
 
-// Timers -----------------------------------------------------------------
+public void ConVar_OnSpecialStringChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+	convar.GetString(g_sSpecialString, sizeof(g_sSpecialString));
+}
+
+// Timers ----------------------------------------------------------------------------------
+
 public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
 		SetViewAngles(client);
-		CreateTimer(0.03, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 	return Plugin_Stop;
 }
 
-public Action Timer_SetInitialAngles(Handle timer, int serial)
-{
-	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
-	{
-		SetViewAngles(client);
-		CreateTimer(0.03, Timer_ActivateThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-	}
-	
-	return Plugin_Stop;
-}
-
-public Action Timer_ActivateThirdPerson(Handle timer, int serial)
+public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Stop;
 	
+	SetViewAngles(client);
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
 	SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 	SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 
-	RestoreLookAngles(client);
+	RestorePlayerViewAngles(client);
 	
 	return Plugin_Stop;
 }
 
-public Action Timer_SimpleRefresh(Handle timer, int serial)
-{
-	int client = GetClientFromSerial(serial);
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-		return Plugin_Stop;
-	
-	SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
-	SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
-	SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
-
-	RestoreLookAngles(client);
-	
-	return Plugin_Stop;
-}
+// Functions -------------------------------------------------------------------------------
 
 void SetViewAngles(int client)
 {
@@ -283,9 +274,20 @@ void SetViewAngles(int client)
 	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
 }
 
-public void ConVar_OnSpecialStringChanged(ConVar convar, const char[] oldValue, const char[] newValue)
+public void StorePlayerViewAngles(int client)
 {
-	convar.GetString(g_sSpecialString, sizeof(g_sSpecialString));
+    if(!IsValidClient(client))
+        return;
+
+    GetClientEyeAngles(client, g_storedAngles[client]);
+}
+
+public void RestorePlayerViewAngles(int client)
+{
+    if(!IsValidClient(client))
+        return;
+
+    TeleportEntity(client, NULL_VECTOR, g_storedAngles[client], NULL_VECTOR);
 }
 
 void EnableThirdPerson(int client)
@@ -297,7 +299,7 @@ void EnableThirdPerson(int client)
 	g_iCameraRotation[client] = 0;
 
 	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
-	CreateTimer(0.05, Timer_SetInitialAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffUse \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffType \x07A082FF/tchelp \x07ffffffto see additional commands");
@@ -320,12 +322,34 @@ void DisableThirdPerson(int client)
 	TeleportEntity(client, NULL_VECTOR, resetAngles, NULL_VECTOR);
 }
 
+void SaveSettingToCookie(Cookie cookie, int client, int value)
+{
+	char buffer[8];
+	Format(buffer, sizeof(buffer), "%d", value);
+	cookie.Set(client, buffer);
+}
+
+public bool IsInTCStyle(int client)
+{
+	int style = Shavit_GetBhopStyle(client);
+    char sStyleSpecial[sizeof(stylestrings_t::sSpecialString)];
+	Shavit_GetStyleStrings(style, sSpecialString, sStyleSpecial, sizeof(sStyleSpecial));
+    bool isInTCStyle = (StrContains(sStyleSpecial, g_sSpecialString) != -1);
+
+	if (isInTCStyle)
+		return true;
+	else
+		return false;
+}
+
+// Commands ----------------------------------------------------------------------------------------
+
 public Action Command_RotateCameraRight(int client, int args)
 {
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Handled;
 
-	StoreLookAngles(client);
+	StorePlayerViewAngles(client);
 	
 	switch(g_iCameraRotation[client])
 	{
@@ -334,15 +358,10 @@ public Action Command_RotateCameraRight(int client, int args)
 		case 180: g_iCameraRotation[client] = 90;
 		case 90: g_iCameraRotation[client] = 0;
 	}
-	
-	float angles[3];
-	angles[0] = 45.0;
-	angles[1] = float(g_iCameraRotation[client]);
-	angles[2] = 0.0;
-	
+
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
-	TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
-	CreateTimer(0.03, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	SetViewAngles(client);
+	CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Handled;
 }
@@ -352,7 +371,7 @@ public Action Command_RotateCameraLeft(int client, int args)
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Handled;
 
-	StoreLookAngles(client);
+	StorePlayerViewAngles(client);
 
 	switch(g_iCameraRotation[client])
 	{
@@ -361,58 +380,27 @@ public Action Command_RotateCameraLeft(int client, int args)
 		case 180: g_iCameraRotation[client] = -90;
 		case -90: g_iCameraRotation[client] = 0;
 	}
-	
-	float angles[3];
-	angles[0] = 45.0; 
-	angles[1] = float(g_iCameraRotation[client]);
-	angles[2] = 0.0; 
-	
+
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
-	TeleportEntity(client, NULL_VECTOR, angles, NULL_VECTOR);
-	CreateTimer(0.03, Timer_SimpleRefresh, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	SetViewAngles(client);
+	CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Handled;
-}
-
-public void StoreLookAngles(int client)
-{
-    if(!IsValidClient(client))
-        return;
-
-    GetClientEyeAngles(client, g_storedAngles[client]);
-}
-
-public void RestoreLookAngles(int client)
-{
-    if(!IsValidClient(client))
-        return;
-
-    TeleportEntity(client, NULL_VECTOR, g_storedAngles[client], NULL_VECTOR);
 }
 
 public Action Command_ToggleHardCodedBinds(int client, int args)
 {
 	if (!IsValidClient(client) || !IsInTCStyle(client))
-	{
-		Shavit_PrintToChat(client, "\x07ffffffThis command is only available in the \x07A082FFTank Controls \x07ffffffstyle");
 		return Plugin_Handled;
-	}
 	
 	g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
 
-	// Save setting to cookie
-	char buffer[2];
-	Format(buffer, sizeof(buffer), "%d", g_bUseHardcodedKey[client]);
-	g_cToggleTCKeysCookie.Set(client, buffer);
+	SaveSettingToCookie(g_cToggleTCKeysCookie, client, g_bUseHardcodedKey[client]);
 	
 	if (g_bUseHardcodedKey[client])
-	{
 		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffShift / E camera rotation binds: \x078efeffOn");
-	}
 	else
-	{
 		Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffShift / E camera rotation binds: \x07A082FFOff");
-	}
 	
 	return Plugin_Handled;
 }
@@ -420,19 +408,14 @@ public Action Command_ToggleHardCodedBinds(int client, int args)
 public Action Command_ToggleNightVision(int client, int args)
 {
     if (!IsValidClient(client) || !IsPlayerAlive(client))
-    {
         return Plugin_Handled;
-    }
 
     if (IsInTCStyle(client))
     {
         g_bNightVisionIsEnabled[client] = !g_bNightVisionIsEnabled[client];
         SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
 
-		// Save setting to cookie
-		char buffer[2];
-		Format(buffer, sizeof(buffer), "%d", g_bNightVisionIsEnabled[client]);
-		g_cNvgCookie.Set(client, buffer);
+		SaveSettingToCookie(g_cNvgCookie, client, g_bNightVisionIsEnabled[client]);
 
         Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffNight Vision: %s",
             g_bNightVisionIsEnabled[client] ? "\x078efeffOn" : "\x07A082FFOff");
@@ -443,10 +426,7 @@ public Action Command_ToggleNightVision(int client, int args)
 
 public Action Command_ApplyFOV(int client, int args)
 {
-	if (client == 0)
-		return Plugin_Handled;
-
-	if (!IsInTCStyle(client))
+	if (!IsValidClient(client) || !IsInTCStyle(client))
 		return Plugin_Handled;
 
 	// If no FOV value is given
@@ -471,10 +451,7 @@ public Action Command_ApplyFOV(int client, int args)
 
 	g_iFov[client] = iFov;
 
-	// Save setting to cookie
-	char buffer[8];
-	Format(buffer, sizeof(buffer), "%d", g_iFov[client]);
-	g_cFovCookie.Set(client, buffer);
+	SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
 
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffFOV set to: \x07A082FF%i \x07ffffff(Default: 105 | Game Default: 90)", g_iFov[client]);
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07A082FFChanging the FOV affects mouse sensitivity!");
@@ -482,44 +459,9 @@ public Action Command_ApplyFOV(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action Command_TcHelp(int client, int args)
-{
-	if (client == 0)
-		return Plugin_Handled;
-
-	if (!IsInTCStyle(client))
-		return Plugin_Handled;
-	
-	ShowHelpMenu(client);
-
-	return Plugin_Handled;
-}
-
-public bool IsInTCStyle(int client)
-{
-	int style = Shavit_GetBhopStyle(client);
-    char sStyleSpecial[sizeof(stylestrings_t::sSpecialString)];
-	Shavit_GetStyleStrings(style, sSpecialString, sStyleSpecial, sizeof(sStyleSpecial));
-    bool isInTCStyle = (StrContains(sStyleSpecial, g_sSpecialString) != -1);
-
-	if (isInTCStyle)
-		return true;
-	else
-		return false;
-}
-
-// Helper function to save cookie settings
-void SaveCookieSetting(Cookie cookie, int client, int value)
-{
-	char buffer[8];
-	Format(buffer, sizeof(buffer), "%d", value);
-	cookie.Set(client, buffer);
-}
-
-// Menu Functions
 public Action Command_TcMenu(int client, int args)
 {
-	if (client == 0)
+	if (!IsValidClient(client))
 		return Plugin_Handled;
 
 	if (!IsInTCStyle(client))
@@ -529,8 +471,21 @@ public Action Command_TcMenu(int client, int args)
 	}
 
 	ShowMainMenu(client);
+
 	return Plugin_Handled;
 }
+
+public Action Command_TcHelp(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInTCStyle(client))
+		return Plugin_Handled;
+	
+	ShowHelpMenu(client);
+
+	return Plugin_Handled;
+}
+
+// Menus ------------------------------------------------------------------------
 
 void ShowMainMenu(int client)
 {
@@ -553,35 +508,35 @@ void ShowMainMenu(int client)
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int MainMenuHandler(Menu menu, MenuAction action, int param1, int param2)
+public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 {
 	switch(action)
 	{
 		case MenuAction_Select:
 		{
 			char info[32];
-			menu.GetItem(param2, info, sizeof(info));
+			menu.GetItem(option, info, sizeof(info));
 			
 			if (StrEqual(info, "binds"))
 			{
-				g_bUseHardcodedKey[param1] = !g_bUseHardcodedKey[param1];
-				SaveCookieSetting(g_cToggleTCKeysCookie, param1, g_bUseHardcodedKey[param1]);
-				ShowMainMenu(param1);
+				g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
+				SaveSettingToCookie(g_cToggleTCKeysCookie, client, g_bUseHardcodedKey[client]);
+				ShowMainMenu(client);
 			}
 			else if (StrEqual(info, "nvg"))
 			{
-				g_bNightVisionIsEnabled[param1] = !g_bNightVisionIsEnabled[param1];
-				SetEntProp(param1, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[param1] ? 1 : 0);
-				SaveCookieSetting(g_cNvgCookie, param1, g_bNightVisionIsEnabled[param1]);
-				ShowMainMenu(param1);
+				g_bNightVisionIsEnabled[client] = !g_bNightVisionIsEnabled[client];
+				SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
+				SaveSettingToCookie(g_cNvgCookie, client, g_bNightVisionIsEnabled[client]);
+				ShowMainMenu(client);
 			}
 			else if (StrEqual(info, "fov"))
 			{
-				ShowFovMenu(param1);
+				ShowFovMenu(client);
 			}
 			else if (StrEqual(info, "help"))
 			{
-				ShowHelpMenu(param1);
+				ShowHelpMenu(client);
 			}
 		}
 		case MenuAction_End:
@@ -603,10 +558,62 @@ void ShowFovMenu(int client)
 	
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
+
 	menu.AddItem("back", "Back");
 	
 	menu.ExitButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
+{
+	switch(action)
+	{
+		case MenuAction_Select:
+		{
+			char info[32];
+			menu.GetItem(option, info, sizeof(info));
+			
+			if (StrEqual(info, "increase"))
+			{
+				if (g_iFov[client] < 120)
+				{
+					g_iFov[client] += 5;
+					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
+					
+					// Apply FOV if in third person
+					if (g_bThirdPersonEnabled[client])
+						SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+				}
+
+				ShowFovMenu(client);
+			}
+			else if (StrEqual(info, "decrease"))
+			{
+				if (g_iFov[client] > 80)
+				{
+					g_iFov[client] -= 5;
+					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
+					
+					// Apply FOV if in third person
+					if (g_bThirdPersonEnabled[client])
+						SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+				}
+
+				ShowFovMenu(client);
+			}
+			else if (StrEqual(info, "back"))
+			{
+				ShowMainMenu(client);
+			}
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+	
+	return 0;
 }
 
 void ShowHelpMenu(int client)
@@ -628,72 +635,17 @@ void ShowHelpMenu(int client)
     menu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int FovMenuHandler(Menu menu, MenuAction action, int param1, int param2)
-{
-	switch(action)
-	{
-		case MenuAction_Select:
-		{
-			char info[32];
-			menu.GetItem(param2, info, sizeof(info));
-			
-			if (StrEqual(info, "increase"))
-			{
-				if (g_iFov[param1] < 120)
-				{
-					g_iFov[param1] += 5;
-					SaveCookieSetting(g_cFovCookie, param1, g_iFov[param1]);
-					
-					// Apply FOV if in third person
-					if (g_bThirdPersonEnabled[param1])
-					{
-						SetEntProp(param1, Prop_Send, "m_iFOV", g_iFov[param1]);
-					}
-				}
-				ShowFovMenu(param1);
-			}
-			else if (StrEqual(info, "decrease"))
-			{
-				if (g_iFov[param1] > 80)
-				{
-					g_iFov[param1] -= 5;
-					SaveCookieSetting(g_cFovCookie, param1, g_iFov[param1]);
-					
-					// Apply FOV if in third person
-					if (g_bThirdPersonEnabled[param1])
-					{
-						SetEntProp(param1, Prop_Send, "m_iFOV", g_iFov[param1]);
-					}
-				}
-				ShowFovMenu(param1);
-			}
-			else if (StrEqual(info, "back"))
-			{
-				ShowMainMenu(param1);
-			}
-		}
-		case MenuAction_End:
-		{
-			delete menu;
-		}
-	}
-	
-	return 0;
-}
-
-public int HelpMenuHandler(Menu menu, MenuAction action, int param1, int param2)
+public int HelpMenuHandler(Menu menu, MenuAction action, int client, int option)
 {
 	switch(action)
 	{
 		case MenuAction_Select:
 		{
 			char sInfo[32];
-			menu.GetItem(param2, sInfo, sizeof(sInfo));
+			menu.GetItem(option, sInfo, sizeof(sInfo));
 			
 			if (StrEqual(sInfo, "mainmenu"))
-			{
-				ShowMainMenu(param1);
-			}
+				ShowMainMenu(client);
 		}
 		case MenuAction_End:
 		{

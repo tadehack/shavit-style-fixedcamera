@@ -302,7 +302,7 @@ void EnableThirdPerson(int client)
 	CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffUse \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
-	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffType \x07A082FF/tchelp \x07ffffffto see additional commands");
+	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffType \x07A082FF/tcmenu \x07fffffffor additional commands and help");
 }
 
 void DisableThirdPerson(int client)

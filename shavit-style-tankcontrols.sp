@@ -14,6 +14,7 @@ ConVar g_cvSpecialString;
 char g_sSpecialString[stylestrings_t::sSpecialString];
 
 bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
+bool g_bUseDiagonalCamera[MAXPLAYERS + 1];
 bool g_bUseHardcodedKey[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 
@@ -23,6 +24,7 @@ int g_iFov[MAXPLAYERS + 1];
 
 float g_storedAngles[MAXPLAYERS + 1][3];
 
+Cookie g_cUseDiagonalCameraCookie;
 Cookie g_cToggleTCKeysCookie;
 Cookie g_cFovCookie;
 Cookie g_cNvgCookie;
@@ -33,7 +35,7 @@ public Plugin myinfo = {
 	name = "Shavit - Tank Controls Style",
 	author = "devins, shinoum", 
 	description = "Tank-style thirdperson camera style for CS:S Bhop Timer",
-	version = "1.1.3",
+	version = "1.1.4",
 	url = "https://github.com/NSchrot/shavit-style-tankcontrols"
 }
 
@@ -64,9 +66,11 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_nv", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 
 	// Toggle Shift / E Keys
+	RegConsoleCmd("sm_toggletcbinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_toggletckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_usetckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_usehckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
+	RegConsoleCmd("sm_tcbinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_tckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 
 	// Field of View
@@ -82,11 +86,18 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_tcoptions", Command_TcMenu, "Open Tank Controls settings menu");
 	RegConsoleCmd("sm_tcmenu", Command_TcMenu, "Open Tank Controls settings menu");
 
+	// Toggle Diagonal Camera Angles
+	RegConsoleCmd("sm_tcdiagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_diagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_tcdiagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_diagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+
 	// Cookies ---------
 
 	g_cToggleTCKeysCookie = new Cookie("Toggle_TCKeys", "Toggle Hardcoded binds state", CookieAccess_Protected);
 	g_cFovCookie = new Cookie("fov", "fov state", CookieAccess_Protected);
 	g_cNvgCookie = new Cookie("nvg", "nvg state", CookieAccess_Protected);
+	g_cUseDiagonalCameraCookie = new Cookie("Toggle_Diagonal", "Diagonal Camera state", CookieAccess_Protected);
 
 	for (int client = 1; client <= MaxClients; client++)
 	{
@@ -102,7 +113,7 @@ public void OnPluginStart()
 	AutoExecConfig();
 }
 
-// Ons -------------------------------------------------------------------------------------
+// On Clients / Players --------------------------------------------------------------------
 
 public void OnClientPutInServer(int client)
 {
@@ -122,6 +133,18 @@ public void OnClientCookiesCached(int client)
 		return;
 	
 	char buffer[8];
+	
+	// Load Diagonal Camera cookie
+	g_cUseDiagonalCameraCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+	    g_bUseDiagonalCamera[client] = false;
+	    g_cUseDiagonalCameraCookie.Set(client, "0");
+	}
+	else
+	{
+	    g_bUseDiagonalCamera[client] = (StringToInt(buffer) == 1);
+	}
 	
 	// Load Use TC Hardcoded binds cookie
 	g_cToggleTCKeysCookie.Get(client, buffer, sizeof(buffer));
@@ -241,8 +264,9 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
 		SetViewAngles(client);
-		CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
+
 	return Plugin_Stop;
 }
 
@@ -252,7 +276,6 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Stop;
 	
-	SetViewAngles(client);
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
 	SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 	SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
@@ -268,7 +291,12 @@ void SetViewAngles(int client)
 {
 	float idealAngles[3];
 	idealAngles[0] = 45.0;
-	idealAngles[1] = float(g_iCameraRotation[client]); 
+
+	if (!g_bUseDiagonalCamera[client])
+		idealAngles[1] = float(g_iCameraRotation[client]); 
+	else
+		idealAngles[1] = float(g_iCameraRotation[client] - 45);
+
 	idealAngles[2] = 0.0;  
 	
 	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
@@ -290,7 +318,7 @@ public void RestorePlayerViewAngles(int client)
     TeleportEntity(client, NULL_VECTOR, g_storedAngles[client], NULL_VECTOR);
 }
 
-void EnableThirdPerson(int client)
+public void EnableThirdPerson(int client)
 {
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;
@@ -305,7 +333,7 @@ void EnableThirdPerson(int client)
 	Shavit_PrintToChat(client, "\x078efeffTank Controls: \x07ffffffType \x07A082FF/tcmenu \x07fffffffor additional commands and help");
 }
 
-void DisableThirdPerson(int client)
+public void DisableThirdPerson(int client)
 {
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;
@@ -322,7 +350,7 @@ void DisableThirdPerson(int client)
 	TeleportEntity(client, NULL_VECTOR, resetAngles, NULL_VECTOR);
 }
 
-void SaveSettingToCookie(Cookie cookie, int client, int value)
+public void SaveSettingToCookie(Cookie cookie, int client, int value)
 {
 	char buffer[8];
 	Format(buffer, sizeof(buffer), "%d", value);
@@ -361,7 +389,7 @@ public Action Command_RotateCameraRight(int client, int args)
 
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
 	SetViewAngles(client);
-	CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 	return Plugin_Handled;
 }
@@ -383,7 +411,25 @@ public Action Command_RotateCameraLeft(int client, int args)
 
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
 	SetViewAngles(client);
+	CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+	return Plugin_Handled;
+}
+
+public Action Command_ToggleDiagonalCamera(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInTCStyle(client))
+		return Plugin_Handled;
+
+	StorePlayerViewAngles(client);
+	
+	g_bUseDiagonalCamera[client] = !g_bUseDiagonalCamera[client];
+	
+	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+	SetViewAngles(client);
 	CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
 
 	return Plugin_Handled;
 }
@@ -465,10 +511,7 @@ public Action Command_TcMenu(int client, int args)
 		return Plugin_Handled;
 
 	if (!IsInTCStyle(client))
-	{
-		Shavit_PrintToChat(client, "\x07ffffffThis command is only available in the \x07A082FFTank Controls \x07ffffffstyle");
 		return Plugin_Handled;
-	}
 
 	ShowMainMenu(client);
 
@@ -491,6 +534,10 @@ void ShowMainMenu(int client)
 {
 	Menu menu = new Menu(MainMenuHandler, MENU_ACTIONS_DEFAULT);
 	menu.SetTitle("Tank Controls\n \n");
+
+	char diagonalCameraStatus[32];
+	Format(diagonalCameraStatus, sizeof(diagonalCameraStatus), "Diagonal Camera: %s", g_bUseDiagonalCamera[client] ? "On" : "Off");
+	menu.AddItem("diagonalCamera", diagonalCameraStatus);
 	
 	char bindStatus[32];
 	Format(bindStatus, sizeof(bindStatus), "Shift / E Binds: %s", g_bUseHardcodedKey[client] ? "On" : "Off");
@@ -517,7 +564,12 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (StrEqual(info, "binds"))
+			if (StrEqual(info, "diagonalCamera"))
+			{
+				Command_ToggleDiagonalCamera(client, 0);
+				ShowMainMenu(client);
+			}
+			else if (StrEqual(info, "binds"))
 			{
 				g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
 				SaveSettingToCookie(g_cToggleTCKeysCookie, client, g_bUseHardcodedKey[client]);
@@ -619,10 +671,9 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowHelpMenu(int client)
 {
     Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
-    menu.SetTitle("Tank Controls | Commands / Help\n \n");
-    
-    menu.AddItem("", "Camera Angle: Shift / E or bind a key to tcleft / tcright\n \n", ITEMDRAW_DISABLED);
+    menu.SetTitle("Tank Controls | Commands & Help\n \nCamera Angle: Shift / E or bind a key to tcleft / tcright\n ");
 
+	menu.AddItem("", "/tcdiagonal: Toggle Diagonal Camera Angles", ITEMDRAW_DISABLED);
 	menu.AddItem("", "/toggletckeys: Toggle Shift / E binds", ITEMDRAW_DISABLED);
     menu.AddItem("", "/tcnvg: Toggle Night Vision", ITEMDRAW_DISABLED);
 	menu.AddItem("", "/tcfov: Adjust FOV (80-120)\n \n", ITEMDRAW_DISABLED);

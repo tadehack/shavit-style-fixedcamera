@@ -17,6 +17,7 @@ bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
 bool g_bUseDiagonalCamera[MAXPLAYERS + 1];
 bool g_bUseHardcodedKey[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
+bool g_bMovementBlocked[MAXPLAYERS + 1];
 
 int g_iCameraRotation[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
@@ -187,6 +188,8 @@ public void OnClientDisconnect(int client)
 {
 	if (g_bThirdPersonEnabled[client])
 		DisableThirdPerson(client);
+
+	g_bMovementBlocked[client] = false;
 }
 
 // fix for fov being reset after dropping or picking up a weapon
@@ -224,6 +227,20 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 	}
 
 	g_iLastButtons[client] = buttons;
+
+	// Block Movement keys when switching camera angle to prevent speed loss
+	if (g_bMovementBlocked[client])
+    {
+        if (buttons & IN_FORWARD) buttons &= ~IN_FORWARD;
+        if (buttons & IN_BACK) buttons &= ~IN_BACK;
+        if (buttons & IN_MOVELEFT) buttons &= ~IN_MOVELEFT;
+        if (buttons & IN_MOVERIGHT) buttons &= ~IN_MOVERIGHT;
+
+        vel[0] = 0.0;
+        vel[1] = 0.0;
+
+        return Plugin_Changed;
+    }
 	
 	return Plugin_Continue;
 }
@@ -273,15 +290,25 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-		return Plugin_Stop;
-	
-	SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
-	SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
-	SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	{
+		SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
+		SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
+		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 
-	RestorePlayerViewAngles(client);
-	
+		RestorePlayerViewAngles(client);
+		CreateTimer(0.01, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	return Plugin_Stop;
+}
+
+public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
+{
+	int client = GetClientFromSerial(serial);
+	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+		g_bMovementBlocked[client] = false;
+
 	return Plugin_Stop;
 }
 
@@ -374,46 +401,50 @@ public bool IsInTCStyle(int client)
 
 public Action Command_RotateCameraRight(int client, int args)
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-		return Plugin_Handled;
+    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+        return Plugin_Handled;
 
-	StorePlayerViewAngles(client);
-	
-	switch(g_iCameraRotation[client])
-	{
-		case 0: g_iCameraRotation[client] = -90;
-		case -90: g_iCameraRotation[client] = 180;
-		case 180: g_iCameraRotation[client] = 90;
-		case 90: g_iCameraRotation[client] = 0;
-	}
+    StorePlayerViewAngles(client);
+    
+    switch(g_iCameraRotation[client])
+    {
+        case 0: g_iCameraRotation[client] = -90;
+        case -90: g_iCameraRotation[client] = 180;
+        case 180: g_iCameraRotation[client] = 90;
+        case 90: g_iCameraRotation[client] = 0;
+    }
 
-	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
-	SetViewAngles(client);
-	CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+    SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+    g_bMovementBlocked[client] = true;
+    
+    SetViewAngles(client);
+    CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
-	return Plugin_Handled;
+    return Plugin_Handled;
 }
 
 public Action Command_RotateCameraLeft(int client, int args)
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-		return Plugin_Handled;
+    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+        return Plugin_Handled;
 
-	StorePlayerViewAngles(client);
+    StorePlayerViewAngles(client);
 
-	switch(g_iCameraRotation[client])
-	{
-		case 0: g_iCameraRotation[client] = 90;
-		case 90: g_iCameraRotation[client] = 180;
-		case 180: g_iCameraRotation[client] = -90;
-		case -90: g_iCameraRotation[client] = 0;
-	}
+    switch(g_iCameraRotation[client])
+    {
+        case 0: g_iCameraRotation[client] = 90;
+        case 90: g_iCameraRotation[client] = 180;
+        case 180: g_iCameraRotation[client] = -90;
+        case -90: g_iCameraRotation[client] = 0;
+    }
 
-	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
-	SetViewAngles(client);
-	CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+    SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+    g_bMovementBlocked[client] = true;
+    
+    SetViewAngles(client);
+    CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
-	return Plugin_Handled;
+    return Plugin_Handled;
 }
 
 public Action Command_ToggleDiagonalCamera(int client, int args)
@@ -426,6 +457,8 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 	g_bUseDiagonalCamera[client] = !g_bUseDiagonalCamera[client];
 	
 	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+	g_bMovementBlocked[client] = true;
+
 	SetViewAngles(client);
 	CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 

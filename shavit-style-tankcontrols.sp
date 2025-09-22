@@ -37,7 +37,11 @@ public Plugin myinfo = {
 	name = "Shavit - Tank Controls Style",
 	author = "devins, shinoum", 
 	description = "Tank-style thirdperson camera style for CS:S Bhop Timer",
+<<<<<<< HEAD
 	version = "1.1.5",
+=======
+	version = "1.1.4",
+>>>>>>> b80dcc4f312c80e367cea4a037183b9e76a28b5c
 	url = "https://github.com/NSchrot/shavit-style-tankcontrols"
 }
 
@@ -101,6 +105,7 @@ public void OnPluginStart()
 	g_cToggleTCKeysCookie = new Cookie("Toggle_TCKeys", "Toggle Hardcoded binds state", CookieAccess_Protected);
 	g_cFovCookie = new Cookie("fov", "fov state", CookieAccess_Protected);
 	g_cNvgCookie = new Cookie("nvg", "nvg state", CookieAccess_Protected);
+	g_cUseDiagonalCameraCookie = new Cookie("Toggle_Diagonal", "Diagonal Camera state", CookieAccess_Protected);
 
 	for (int client = 1; client <= MaxClients; client++)
 	{
@@ -299,7 +304,10 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 
 		RestorePlayerViewAngles(client);
+<<<<<<< HEAD
 
+=======
+>>>>>>> b80dcc4f312c80e367cea4a037183b9e76a28b5c
 		CreateTimer(0.01, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
@@ -407,8 +415,13 @@ public Action Command_RotateCameraRight(int client, int args)
 {
     if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
         return Plugin_Handled;
+<<<<<<< HEAD
 	
 	StorePlayerViewAngles(client);
+=======
+
+    StorePlayerViewAngles(client);
+>>>>>>> b80dcc4f312c80e367cea4a037183b9e76a28b5c
     
     switch(g_iCameraRotation[client])
     {
@@ -418,11 +431,19 @@ public Action Command_RotateCameraRight(int client, int args)
         case 90: g_iCameraRotation[client] = 0;
     }
 
+<<<<<<< HEAD
 	SendConVarValue(client, g_hMpForceCamera, "0");
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);
     CreateTimer(0.025, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+=======
+    SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+    g_bMovementBlocked[client] = true;
+    
+    SetViewAngles(client);
+    CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+>>>>>>> b80dcc4f312c80e367cea4a037183b9e76a28b5c
 
     return Plugin_Handled;
 }
@@ -431,8 +452,13 @@ public Action Command_RotateCameraLeft(int client, int args)
 {
     if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
         return Plugin_Handled;
+<<<<<<< HEAD
 	
 	StorePlayerViewAngles(client);
+=======
+
+    StorePlayerViewAngles(client);
+>>>>>>> b80dcc4f312c80e367cea4a037183b9e76a28b5c
 
     switch(g_iCameraRotation[client])
     {
@@ -442,11 +468,19 @@ public Action Command_RotateCameraLeft(int client, int args)
         case -90: g_iCameraRotation[client] = 0;
     }
 
+<<<<<<< HEAD
 	SendConVarValue(client, g_hMpForceCamera, "0");
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);
     CreateTimer(0.025, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+=======
+    SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+    g_bMovementBlocked[client] = true;
+    
+    SetViewAngles(client);
+    CreateTimer(0.02, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+>>>>>>> b80dcc4f312c80e367cea4a037183b9e76a28b5c
 
     return Plugin_Handled;
 }
@@ -460,7 +494,11 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 	
 	g_bUseDiagonalCamera[client] = !g_bUseDiagonalCamera[client];
 	
+<<<<<<< HEAD
 	SendConVarValue(client, g_hMpForceCamera, "0");
+=======
+	SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+>>>>>>> b80dcc4f312c80e367cea4a037183b9e76a28b5c
 	g_bMovementBlocked[client] = true;
 
 	SetViewAngles(client);

@@ -211,19 +211,22 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3])
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client] || !g_bUseHardcodedKey[client])
+	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Continue;
 
-	if (buttons & IN_USE)
+	if (g_bUseHardcodedKey[client])
 	{
-		if (!(g_iLastButtons[client] & IN_USE))
-			Command_RotateCameraRight(client, 0);
-	}
-	
-	if (buttons & IN_SPEED)
-	{
-		if (!(g_iLastButtons[client] & IN_SPEED))
-			Command_RotateCameraLeft(client, 0);
+		if (buttons & IN_USE)
+		{
+			if (!(g_iLastButtons[client] & IN_USE))
+				Command_RotateCameraRight(client, 0);
+		}
+		
+		if (buttons & IN_SPEED)
+		{
+			if (!(g_iLastButtons[client] & IN_SPEED))
+				Command_RotateCameraLeft(client, 0);
+		}
 	}
 
 	g_iLastButtons[client] = buttons;

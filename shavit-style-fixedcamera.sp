@@ -37,7 +37,7 @@ public Plugin myinfo = {
 	name = "Shavit - Fixed Camera Style",
 	author = "devins, shinoum", 
 	description = "Fixed Camera Style for CS:S Bhop Timer",
-	version = "1.1.6",
+	version = "1.1.7",
 	url = "https://github.com/NSchrot/shavit-style-fixedcamera"
 }
 
@@ -54,16 +54,16 @@ public void OnPluginStart()
 
 	// Commands ---------
 
-	// Rotate Camera Left / Right
-	RegConsoleCmd("fcright", Command_RotateCameraRight, "Rotate camera right");
+	// Camera Controls
 	RegConsoleCmd("fcleft", Command_RotateCameraLeft, "Rotate camera left");
+	RegConsoleCmd("fcright", Command_RotateCameraRight, "Rotate camera right");
+	RegConsoleCmd("fcdiagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 
-	// Nightvision
-	RegConsoleCmd("sm_fcnightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
-	RegConsoleCmd("sm_nightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
-	RegConsoleCmd("sm_fcnvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
-	RegConsoleCmd("sm_nvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
-	RegConsoleCmd("sm_nv", Command_ToggleNightVision, "Toggle Night Vision Goggles");
+	// Toggle Diagonal Camera Angles
+	RegConsoleCmd("sm_fcdiagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_diagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_fcdiagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_diagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 
 	// Toggle Shift / E Keys
 	RegConsoleCmd("sm_fchardcodedbinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
@@ -72,6 +72,13 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fcusekeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fcbinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
+
+	// Nightvision
+	RegConsoleCmd("sm_fcnightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
+	RegConsoleCmd("sm_nightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
+	RegConsoleCmd("sm_fcnvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
+	RegConsoleCmd("sm_nvg", Command_ToggleNightVision, "Toggle Night Vision Goggles");
+	RegConsoleCmd("sm_nv", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 
 	// Field of View
 	RegConsoleCmd("sm_fcfov", Command_ApplyFOV, "Apply User Inserted FOV");
@@ -85,12 +92,6 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fcsettings", Command_MainMenu, "Open Fixed Camera settings menu");
 	RegConsoleCmd("sm_fcoptions", Command_MainMenu, "Open Fixed Camera settings menu");
 	RegConsoleCmd("sm_fcmenu", Command_MainMenu, "Open Fixed Camera settings menu");
-
-	// Toggle Diagonal Camera Angles
-	RegConsoleCmd("sm_fcdiagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
-	RegConsoleCmd("sm_diagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
-	RegConsoleCmd("sm_fcdiagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
-	RegConsoleCmd("sm_diagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 
 	// Cookies ---------
 
@@ -158,18 +159,6 @@ public void OnClientCookiesCached(int client)
 	    g_bUseHardcodedKey[client] = (StringToInt(buffer) == 1);
 	}
 
-	// Load FOV Cookie
-	g_cFovCookie.Get(client, buffer, sizeof(buffer));
-	if (buffer[0] == '\0')
-	{
-		g_iFov[client] = 105;
-		g_cFovCookie.Set(client, "105");
-	}
-	else
-	{
-		g_iFov[client] = StringToInt(buffer);
-	}
-
 	// Load Night Vision Goggles cookie
 	g_cNvgCookie.Get(client, buffer, sizeof(buffer));
 	if (buffer[0] == '\0')
@@ -180,6 +169,18 @@ public void OnClientCookiesCached(int client)
 	else
 	{
 	    g_bNightVisionIsEnabled[client] = (StringToInt(buffer) == 1);
+	}
+
+	// Load FOV Cookie
+	g_cFovCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_iFov[client] = 105;
+		g_cFovCookie.Set(client, "105");
+	}
+	else
+	{
+		g_iFov[client] = StringToInt(buffer);
 	}
 }
 
@@ -272,6 +273,163 @@ public void ConVar_OnSpecialStringChanged(ConVar convar, const char[] oldValue, 
 	convar.GetString(g_sSpecialString, sizeof(g_sSpecialString));
 }
 
+// Commands ---------------------------------------------------------------------------------
+
+public Action Command_RotateCameraRight(int client, int args)
+{
+    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+        return Plugin_Handled;
+	
+	StorePlayerViewAngles(client);
+    
+    switch(g_iCameraRotation[client])
+    {
+        case 0: g_iCameraRotation[client] = -90;
+        case -90: g_iCameraRotation[client] = 180;
+        case 180: g_iCameraRotation[client] = 90;
+        case 90: g_iCameraRotation[client] = 0;
+    }
+
+	SendConVarValue(client, g_hMpForceCamera, "0");
+    g_bMovementBlocked[client] = true;
+    
+    SetViewAngles(client);
+    CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+    return Plugin_Handled;
+}
+
+public Action Command_RotateCameraLeft(int client, int args)
+{
+    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+        return Plugin_Handled;
+	
+	StorePlayerViewAngles(client);
+
+    switch(g_iCameraRotation[client])
+    {
+        case 0: g_iCameraRotation[client] = 90;
+        case 90: g_iCameraRotation[client] = 180;
+        case 180: g_iCameraRotation[client] = -90;
+        case -90: g_iCameraRotation[client] = 0;
+    }
+
+	SendConVarValue(client, g_hMpForceCamera, "0");
+    g_bMovementBlocked[client] = true;
+    
+    SetViewAngles(client);
+    CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+    return Plugin_Handled;
+}
+
+public Action Command_ToggleDiagonalCamera(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+
+	StorePlayerViewAngles(client);
+	
+	g_bUseDiagonalCamera[client] = !g_bUseDiagonalCamera[client];
+	SendConVarValue(client, g_hMpForceCamera, "0");
+	g_bMovementBlocked[client] = true;
+
+	SetViewAngles(client);
+	CreateTimer(0.034, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
+
+	return Plugin_Handled;
+}
+
+public Action Command_ToggleHardCodedBinds(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+	
+	g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
+
+	SaveSettingToCookie(g_cUseHardCodedBindsCookie, client, g_bUseHardcodedKey[client]);
+	
+	if (g_bUseHardcodedKey[client])
+		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffShift / E camera rotation binds: \x078efeffOn");
+	else
+		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffShift / E camera rotation binds: \x07A082FFOff");
+	
+	return Plugin_Handled;
+}
+
+public Action Command_ToggleNightVision(int client, int args)
+{
+    if (!IsValidClient(client) || !IsInFCStyle(client))
+        return Plugin_Handled;
+
+	g_bNightVisionIsEnabled[client] = !g_bNightVisionIsEnabled[client];
+	SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
+
+	SaveSettingToCookie(g_cNvgCookie, client, g_bNightVisionIsEnabled[client]);
+
+	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffNight Vision: %s",
+		g_bNightVisionIsEnabled[client] ? "\x078efeffOn" : "\x07A082FFOff");
+
+    return Plugin_Handled;
+}
+
+public Action Command_ApplyFOV(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+
+	// If no FOV value is given
+	if (args < 1)
+	{
+		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffCurrent FOV: \x07A082FF%i \x07ffffff(Default: 105 | Game Default: 90)", g_iFov[client]);
+		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffUsage: /fcfov \x07A082FF<value>");
+		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07A082FFChanging the FOV affects mouse sensitivity!");
+		ShowFovMenu(client);
+		
+		return Plugin_Handled;
+	}
+
+	int iMinFov = 80;
+	int imaxFov = 120;
+	int iFov = GetCmdArgInt(1);
+	
+	if (iFov < iMinFov)
+		iFov = iMinFov;
+	else if (iFov > imaxFov)
+		iFov = imaxFov;
+
+	g_iFov[client] = iFov;
+
+	SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
+
+	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffFOV set to: \x07A082FF%i \x07ffffff(Default: 105 | Game Default: 90)", g_iFov[client]);
+	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07A082FFChanging the FOV affects mouse sensitivity!");
+
+	return Plugin_Handled;
+}
+
+public Action Command_MainMenu(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+
+	ShowMainMenu(client);
+
+	return Plugin_Handled;
+}
+
+public Action Command_Help(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+	
+	ShowHelpMenu(client);
+
+	return Plugin_Handled;
+}
+
 // Timers ----------------------------------------------------------------------------------
 
 public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
@@ -281,6 +439,8 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 	{
 		SetViewAngles(client);
 		CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
 	}
 
 	return Plugin_Stop;
@@ -357,7 +517,7 @@ public void EnableThirdPerson(int client)
 	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
 	CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	
-	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffUse \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
+	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffPress \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
 	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffType \x07A082FF/fcmenu \x07fffffffor additional commands and help");
 }
 
@@ -378,13 +538,6 @@ public void DisableThirdPerson(int client)
 	TeleportEntity(client, NULL_VECTOR, resetAngles, NULL_VECTOR);
 }
 
-public void SaveSettingToCookie(Cookie cookie, int client, int value)
-{
-	char buffer[8];
-	Format(buffer, sizeof(buffer), "%d", value);
-	cookie.Set(client, buffer);
-}
-
 public bool IsInFCStyle(int client)
 {
 	int style = Shavit_GetBhopStyle(client);
@@ -398,167 +551,11 @@ public bool IsInFCStyle(int client)
 		return false;
 }
 
-// Commands ----------------------------------------------------------------------------------------
-
-public Action Command_RotateCameraRight(int client, int args)
+public void SaveSettingToCookie(Cookie cookie, int client, int value)
 {
-    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-        return Plugin_Handled;
-	
-	StorePlayerViewAngles(client);
-    
-    switch(g_iCameraRotation[client])
-    {
-        case 0: g_iCameraRotation[client] = -90;
-        case -90: g_iCameraRotation[client] = 180;
-        case 180: g_iCameraRotation[client] = 90;
-        case 90: g_iCameraRotation[client] = 0;
-    }
-
-	SendConVarValue(client, g_hMpForceCamera, "0");
-    g_bMovementBlocked[client] = true;
-    
-    SetViewAngles(client);
-    CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-
-    return Plugin_Handled;
-}
-
-public Action Command_RotateCameraLeft(int client, int args)
-{
-    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-        return Plugin_Handled;
-	
-	StorePlayerViewAngles(client);
-
-    switch(g_iCameraRotation[client])
-    {
-        case 0: g_iCameraRotation[client] = 90;
-        case 90: g_iCameraRotation[client] = 180;
-        case 180: g_iCameraRotation[client] = -90;
-        case -90: g_iCameraRotation[client] = 0;
-    }
-
-	SendConVarValue(client, g_hMpForceCamera, "0");
-    g_bMovementBlocked[client] = true;
-    
-    SetViewAngles(client);
-    CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-
-    return Plugin_Handled;
-}
-
-public Action Command_ToggleDiagonalCamera(int client, int args)
-{
-	if (!IsValidClient(client) || !IsInFCStyle(client))
-		return Plugin_Handled;
-
-	StorePlayerViewAngles(client);
-	
-	g_bUseDiagonalCamera[client] = !g_bUseDiagonalCamera[client];
-	SendConVarValue(client, g_hMpForceCamera, "0");
-	g_bMovementBlocked[client] = true;
-
-	SetViewAngles(client);
-	CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-
-	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
-
-	return Plugin_Handled;
-}
-
-public Action Command_ToggleHardCodedBinds(int client, int args)
-{
-	if (!IsValidClient(client) || !IsInFCStyle(client))
-		return Plugin_Handled;
-	
-	g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
-
-	SaveSettingToCookie(g_cUseHardCodedBindsCookie, client, g_bUseHardcodedKey[client]);
-	
-	if (g_bUseHardcodedKey[client])
-		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffShift / E camera rotation binds: \x078efeffOn");
-	else
-		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffShift / E camera rotation binds: \x07A082FFOff");
-	
-	return Plugin_Handled;
-}
-
-public Action Command_ToggleNightVision(int client, int args)
-{
-    if (!IsValidClient(client) || !IsPlayerAlive(client))
-        return Plugin_Handled;
-
-    if (IsInFCStyle(client))
-    {
-        g_bNightVisionIsEnabled[client] = !g_bNightVisionIsEnabled[client];
-        SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
-
-		SaveSettingToCookie(g_cNvgCookie, client, g_bNightVisionIsEnabled[client]);
-
-        Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffNight Vision: %s",
-            g_bNightVisionIsEnabled[client] ? "\x078efeffOn" : "\x07A082FFOff");
-    }
-
-    return Plugin_Handled;
-}
-
-public Action Command_ApplyFOV(int client, int args)
-{
-	if (!IsValidClient(client) || !IsInFCStyle(client))
-		return Plugin_Handled;
-
-	// If no FOV value is given
-	if (args < 1)
-	{
-		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffCurrent FOV: \x07A082FF%i \x07ffffff(Default: 105 | Game Default: 90)", g_iFov[client]);
-		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffUsage: /fcfov \x07A082FF<value>");
-		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07A082FFChanging the FOV affects mouse sensitivity!");
-		ShowFovMenu(client);
-		
-		return Plugin_Handled;
-	}
-
-	int iMinFov = 80;
-	int imaxFov = 120;
-	int iFov = GetCmdArgInt(1);
-	
-	if (iFov < iMinFov)
-		iFov = iMinFov;
-	else if (iFov > imaxFov)
-		iFov = imaxFov;
-
-	g_iFov[client] = iFov;
-
-	SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
-
-	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffFOV set to: \x07A082FF%i \x07ffffff(Default: 105 | Game Default: 90)", g_iFov[client]);
-	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07A082FFChanging the FOV affects mouse sensitivity!");
-
-	return Plugin_Handled;
-}
-
-public Action Command_MainMenu(int client, int args)
-{
-	if (!IsValidClient(client))
-		return Plugin_Handled;
-
-	if (!IsInFCStyle(client))
-		return Plugin_Handled;
-
-	ShowMainMenu(client);
-
-	return Plugin_Handled;
-}
-
-public Action Command_Help(int client, int args)
-{
-	if (!IsValidClient(client) || !IsInFCStyle(client))
-		return Plugin_Handled;
-	
-	ShowHelpMenu(client);
-
-	return Plugin_Handled;
+	char buffer[8];
+	Format(buffer, sizeof(buffer), "%d", value);
+	cookie.Set(client, buffer);
 }
 
 // Menus ------------------------------------------------------------------------
@@ -704,7 +701,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowHelpMenu(int client)
 {
     Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
-    menu.SetTitle("Fixed Camera | Commands & Help\n \nCamera Angle: Shift / E or bind a key to fcleft / fcright\n ");
+    menu.SetTitle("Fixed Camera | Commands & Help\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\n ");
 
 	menu.AddItem("", "/fcdiagonal: Toggle Diagonal Camera Angles", ITEMDRAW_DISABLED);
 	menu.AddItem("", "/fctogglebinds: Toggle Shift / E binds", ITEMDRAW_DISABLED);

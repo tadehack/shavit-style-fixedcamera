@@ -71,12 +71,12 @@
 Add to your `shavit-styles.cfg`:
 
 ```json
-"TankControls"
+"FixedCamera"
 {
-    "name"              "Tank Controls"
-    "shortname"         "TANK"
+    "name"              "Fixed Camera"
+    "shortname"         "FC"
     "htmlcolor"         "FFFFFF"
-    "specialstring"     "tcontrols"
+    "specialstring"     "fixedcamera"
     // ... other style settings
 }
 ```
@@ -108,3 +108,4 @@ Add to your `shavit-styles.cfg`:
 
 
 ---
+

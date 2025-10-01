@@ -22,6 +22,8 @@ bool g_bMovementBlocked[MAXPLAYERS + 1];
 
 int g_iCameraRotation[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
+int g_iMinFov = 80;
+int g_imaxFov = 125;
 int g_iFov[MAXPLAYERS + 1];
 
 float g_fStoredAngles[MAXPLAYERS + 1][3];
@@ -37,7 +39,7 @@ public Plugin myinfo = {
 	name = "Shavit - Fixed Camera Style",
 	author = "devins, shinoum", 
 	description = "Fixed Camera Style for CS:S Bhop Timer",
-	version = "1.1.7",
+	version = "1.1.8",
 	url = "https://github.com/NSchrot/shavit-style-fixedcamera"
 }
 
@@ -297,7 +299,7 @@ public Action Command_RotateCameraRight(int client, int args)
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);
-    CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+    CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
     return Plugin_Handled;
 }
@@ -321,7 +323,7 @@ public Action Command_RotateCameraLeft(int client, int args)
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);
-    CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+    CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
     return Plugin_Handled;
 }
@@ -372,9 +374,6 @@ public Action Command_ToggleNightVision(int client, int args)
 
 	SaveSettingToCookie(g_cNvgCookie, client, g_bNightVisionIsEnabled[client]);
 
-	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffNight Vision: %s",
-		g_bNightVisionIsEnabled[client] ? "\x078efeffOn" : "\x07A082FFOff");
-
     return Plugin_Handled;
 }
 
@@ -394,14 +393,12 @@ public Action Command_ApplyFOV(int client, int args)
 		return Plugin_Handled;
 	}
 
-	int iMinFov = 80;
-	int imaxFov = 120;
 	int iFov = GetCmdArgInt(1);
 	
-	if (iFov < iMinFov)
-		iFov = iMinFov;
-	else if (iFov > imaxFov)
-		iFov = imaxFov;
+	if (iFov < g_iMinFov)
+		iFov = g_iMinFov;
+	else if (iFov > g_imaxFov)
+		iFov = g_imaxFov;
 
 	g_iFov[client] = iFov;
 
@@ -441,7 +438,7 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
 		SetViewAngles(client);
-		CreateTimer(0.027, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.034, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
 	}
@@ -610,9 +607,7 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 			}
 			else if (StrEqual(info, "nvg"))
 			{
-				g_bNightVisionIsEnabled[client] = !g_bNightVisionIsEnabled[client];
-				SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
-				SaveSettingToCookie(g_cNvgCookie, client, g_bNightVisionIsEnabled[client]);
+				Command_ToggleNightVision(client, 0);
 				ShowMainMenu(client);
 			}
 			else if (StrEqual(info, "fov"))
@@ -661,7 +656,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 			
 			if (StrEqual(info, "increase"))
 			{
-				if (g_iFov[client] < 120)
+				if (g_iFov[client] < g_imaxFov)
 				{
 					g_iFov[client] += 5;
 					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
@@ -675,7 +670,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 			}
 			else if (StrEqual(info, "decrease"))
 			{
-				if (g_iFov[client] > 80)
+				if (g_iFov[client] > g_iMinFov)
 				{
 					g_iFov[client] -= 5;
 					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);

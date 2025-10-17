@@ -16,15 +16,16 @@ char g_sSpecialString[stylestrings_t::sSpecialString];
 
 bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
 bool g_bUseDiagonalCamera[MAXPLAYERS + 1];
-bool g_bUseHardcodedKey[MAXPLAYERS + 1];
+bool g_bUseHardcodedBinds[MAXPLAYERS + 1];
+bool g_bPressedHardcodedBind[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 bool g_bMovementBlocked[MAXPLAYERS + 1];
 
 int g_iCameraRotation[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
+int g_iFov[MAXPLAYERS + 1];
 int g_iMinFov = 80;
 int g_imaxFov = 125;
-int g_iFov[MAXPLAYERS + 1];
 
 float g_fStoredAngles[MAXPLAYERS + 1][3];
 
@@ -153,12 +154,12 @@ public void OnClientCookiesCached(int client)
 	g_cUseHardCodedBindsCookie.Get(client, buffer, sizeof(buffer));
 	if (buffer[0] == '\0')
 	{
-	    g_bUseHardcodedKey[client] = true;
+	    g_bUseHardcodedBinds[client] = true;
 	    g_cUseHardCodedBindsCookie.Set(client, "1");
 	}
 	else
 	{
-	    g_bUseHardcodedKey[client] = (StringToInt(buffer) == 1);
+	    g_bUseHardcodedBinds[client] = (StringToInt(buffer) == 1);
 	}
 
 	// Load Night Vision Goggles cookie
@@ -216,18 +217,24 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
 		return Plugin_Continue;
 
-	if (g_bUseHardcodedKey[client])
+	if (g_bUseHardcodedBinds[client])
 	{
 		if (buttons & IN_USE)
 		{
 			if (!(g_iLastButtons[client] & IN_USE))
+			{
+				g_bPressedHardcodedBind[client] = true;
 				Command_RotateCameraRight(client, 0);
+			}
 		}
 		
 		if (buttons & IN_SPEED)
 		{
 			if (!(g_iLastButtons[client] & IN_SPEED))
+			{
+				g_bPressedHardcodedBind[client] = true;
 				Command_RotateCameraLeft(client, 0);
+			}
 		}
 	}
 
@@ -299,7 +306,15 @@ public Action Command_RotateCameraRight(int client, int args)
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);
-    CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
+	float iRefreshCameraDelay = 0.0;
+	if (g_bPressedHardcodedBind[client])
+		iRefreshCameraDelay = 0.035;
+	else
+		iRefreshCameraDelay = 0.044;
+
+    CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
     return Plugin_Handled;
 }
@@ -323,7 +338,15 @@ public Action Command_RotateCameraLeft(int client, int args)
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);
-    CreateTimer(0.03, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
+	float iRefreshCameraDelay = 0.0;
+	if (g_bPressedHardcodedBind[client])
+		iRefreshCameraDelay = 0.035;
+	else
+		iRefreshCameraDelay = 0.044;
+
+    CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
     return Plugin_Handled;
 }
@@ -340,7 +363,7 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 	g_bMovementBlocked[client] = true;
 
 	SetViewAngles(client);
-	CreateTimer(0.034, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.044, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
 
@@ -352,11 +375,11 @@ public Action Command_ToggleHardCodedBinds(int client, int args)
 	if (!IsValidClient(client) || !IsInFCStyle(client))
 		return Plugin_Handled;
 	
-	g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
+	g_bUseHardcodedBinds[client] = !g_bUseHardcodedBinds[client];
 
-	SaveSettingToCookie(g_cUseHardCodedBindsCookie, client, g_bUseHardcodedKey[client]);
+	SaveSettingToCookie(g_cUseHardCodedBindsCookie, client, g_bUseHardcodedBinds[client]);
 	
-	if (g_bUseHardcodedKey[client])
+	if (g_bUseHardcodedBinds[client])
 		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffShift / E camera rotation binds: \x078efeffOn");
 	else
 		Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffShift / E camera rotation binds: \x07A082FFOff");
@@ -438,7 +461,7 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
 		SetViewAngles(client);
-		CreateTimer(0.034, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.05, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
 	}
@@ -467,7 +490,10 @@ public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	{
 		g_bMovementBlocked[client] = false;
+		g_bPressedHardcodedBind[client] = false;
+	}
 
 	return Plugin_Stop;
 }
@@ -570,7 +596,7 @@ void ShowMainMenu(int client)
 	menu.AddItem("diagonalCamera", diagonalCameraStatus);
 	
 	char bindStatus[32];
-	Format(bindStatus, sizeof(bindStatus), "Shift / E Binds: %s", g_bUseHardcodedKey[client] ? "On" : "Off");
+	Format(bindStatus, sizeof(bindStatus), "Shift / E Binds: %s", g_bUseHardcodedBinds[client] ? "On" : "Off");
 	menu.AddItem("binds", bindStatus);
 	
 	char nvgStatus[32];
@@ -601,8 +627,8 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 			}
 			else if (StrEqual(info, "binds"))
 			{
-				g_bUseHardcodedKey[client] = !g_bUseHardcodedKey[client];
-				SaveSettingToCookie(g_cUseHardCodedBindsCookie, client, g_bUseHardcodedKey[client]);
+				g_bUseHardcodedBinds[client] = !g_bUseHardcodedBinds[client];
+				SaveSettingToCookie(g_cUseHardCodedBindsCookie, client, g_bUseHardcodedBinds[client]);
 				ShowMainMenu(client);
 			}
 			else if (StrEqual(info, "nvg"))
@@ -639,6 +665,8 @@ void ShowFovMenu(int client)
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
 
+	menu.AddItem("default", "Set to Default\n \n");
+
 	menu.AddItem("back", "Back");
 	
 	menu.ExitButton = true;
@@ -654,37 +682,37 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (StrEqual(info, "increase"))
+			if (g_bThirdPersonEnabled[client])
 			{
-				if (g_iFov[client] < g_imaxFov)
+				if (StrEqual(info, "increase"))
 				{
-					g_iFov[client] += 5;
-					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
-					
-					// Apply FOV if in third person
-					if (g_bThirdPersonEnabled[client])
+					if (g_iFov[client] < g_imaxFov)
+					{
+						g_iFov[client] += 5;
 						SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+						SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
+					}
 				}
-
-				ShowFovMenu(client);
-			}
-			else if (StrEqual(info, "decrease"))
-			{
-				if (g_iFov[client] > g_iMinFov)
+				else if (StrEqual(info, "decrease"))
 				{
-					g_iFov[client] -= 5;
-					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
-					
-					// Apply FOV if in third person
-					if (g_bThirdPersonEnabled[client])
+					if (g_iFov[client] > g_iMinFov)
+					{
+						g_iFov[client] -= 5;
 						SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+						SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
+					}
 				}
-
-				ShowFovMenu(client);
-			}
-			else if (StrEqual(info, "back"))
-			{
-				ShowMainMenu(client);
+				else if (StrEqual(info, "default"))
+				{
+					g_iFov[client] = 105;
+					SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
+				}
+				
+				if (StrEqual(info, "back"))
+					ShowMainMenu(client);
+				else
+					ShowFovMenu(client);
 			}
 		}
 		case MenuAction_End:

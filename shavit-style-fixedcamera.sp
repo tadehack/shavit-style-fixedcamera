@@ -25,7 +25,7 @@ int g_iCameraRotation[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
 int g_iFov[MAXPLAYERS + 1];
 int g_iMinFov = 80;
-int g_imaxFov = 125;
+int g_iMaxFov = 125;
 
 float g_fStoredAngles[MAXPLAYERS + 1][3];
 
@@ -420,8 +420,8 @@ public Action Command_ApplyFOV(int client, int args)
 	
 	if (iFov < g_iMinFov)
 		iFov = g_iMinFov;
-	else if (iFov > g_imaxFov)
-		iFov = g_imaxFov;
+	else if (iFov > g_iMaxFov)
+		iFov = g_iMaxFov;
 
 	g_iFov[client] = iFov;
 
@@ -686,7 +686,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 			{
 				if (StrEqual(info, "increase"))
 				{
-					if (g_iFov[client] < g_imaxFov)
+					if (g_iFov[client] < g_iMaxFov)
 					{
 						g_iFov[client] += 5;
 						SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);

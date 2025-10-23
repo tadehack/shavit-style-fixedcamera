@@ -312,7 +312,7 @@ public Action Command_RotateCameraRight(int client, int args)
 	if (g_bPressedHardcodedBind[client])
 		iRefreshCameraDelay = 0.035;
 	else
-		iRefreshCameraDelay = 0.044;
+		iRefreshCameraDelay = 0.042;
 
     CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
@@ -344,7 +344,7 @@ public Action Command_RotateCameraLeft(int client, int args)
 	if (g_bPressedHardcodedBind[client])
 		iRefreshCameraDelay = 0.035;
 	else
-		iRefreshCameraDelay = 0.044;
+		iRefreshCameraDelay = 0.042;
 
     CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
@@ -363,7 +363,7 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 	g_bMovementBlocked[client] = true;
 
 	SetViewAngles(client);
-	CreateTimer(0.044, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.042, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
 

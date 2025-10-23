@@ -21,7 +21,7 @@ bool g_bPressedHardcodedBind[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 bool g_bMovementBlocked[MAXPLAYERS + 1];
 
-int g_iCameraRotation[MAXPLAYERS + 1];
+int g_iCameraAngle[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
 int g_iFov[MAXPLAYERS + 1];
 int g_iMinFov = 80;
@@ -60,11 +60,14 @@ public void OnPluginStart()
 	// Camera Controls
 	RegConsoleCmd("fcleft", Command_RotateCameraLeft, "Rotate camera left");
 	RegConsoleCmd("fcright", Command_RotateCameraRight, "Rotate camera right");
+	RegConsoleCmd("fc180", Command_RotateCamera180, "Rotate camera 180 degrees");
 	RegConsoleCmd("fcdiagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 
 	// Toggle Diagonal Camera Angles
 	RegConsoleCmd("sm_fcdiagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_fcdiagonalangles", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 	RegConsoleCmd("sm_diagonalcamera", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
+	RegConsoleCmd("sm_diagonalangles", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 	RegConsoleCmd("sm_fcdiagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 	RegConsoleCmd("sm_diagonal", Command_ToggleDiagonalCamera, "Toggle between straight / diagonal camera angles");
 
@@ -72,6 +75,8 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fchardcodedbinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fctogglebinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fctogglekeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
+	RegConsoleCmd("sm_fchardcoded", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
+	RegConsoleCmd("sm_hardcoded", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fcusekeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fcbinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
@@ -84,6 +89,8 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_nv", Command_ToggleNightVision, "Toggle Night Vision Goggles");
 
 	// Field of View
+	RegConsoleCmd("sm_fcfieldofview", Command_ApplyFOV, "Apply User Inserted FOV");
+	RegConsoleCmd("sm_fieldofview", Command_ApplyFOV, "Apply User Inserted FOV");
 	RegConsoleCmd("sm_fcfov", Command_ApplyFOV, "Apply User Inserted FOV");
 	RegConsoleCmd("sm_fov", Command_ApplyFOV, "Apply User Inserted FOV");
 
@@ -125,7 +132,7 @@ public void OnClientPutInServer(int client)
 
     if (IsInFCStyle(client))
 	{
-		g_iCameraRotation[client] = 0;
+		g_iCameraAngle[client] = 0;
 		g_iLastButtons[client] = 0;
 		g_bThirdPersonEnabled[client] = true;
 	}
@@ -219,6 +226,15 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 
 	if (g_bUseHardcodedBinds[client])
 	{
+		if (buttons & IN_SPEED)
+		{
+			if (!(g_iLastButtons[client] & IN_SPEED))
+			{
+				g_bPressedHardcodedBind[client] = true;
+				Command_RotateCameraLeft(client, 0);
+			}
+		}
+		
 		if (buttons & IN_USE)
 		{
 			if (!(g_iLastButtons[client] & IN_USE))
@@ -228,12 +244,12 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 			}
 		}
 		
-		if (buttons & IN_SPEED)
+		if (buttons & IN_ATTACK3)
 		{
-			if (!(g_iLastButtons[client] & IN_SPEED))
+			if (!(g_iLastButtons[client] & IN_ATTACK3))
 			{
 				g_bPressedHardcodedBind[client] = true;
-				Command_RotateCameraLeft(client, 0);
+				Command_RotateCamera180(client, 0);
 			}
 		}
 	}
@@ -287,68 +303,31 @@ public void ConVar_OnSpecialStringChanged(ConVar convar, const char[] oldValue, 
 
 // Commands ---------------------------------------------------------------------------------
 
-public Action Command_RotateCameraRight(int client, int args)
-{
-    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-        return Plugin_Handled;
-	
-	StorePlayerViewAngles(client);
-    
-    switch(g_iCameraRotation[client])
-    {
-        case 0: g_iCameraRotation[client] = -90;
-        case -90: g_iCameraRotation[client] = 180;
-        case 180: g_iCameraRotation[client] = 90;
-        case 90: g_iCameraRotation[client] = 0;
-    }
-
-	SendConVarValue(client, g_hMpForceCamera, "0");
-    g_bMovementBlocked[client] = true;
-    
-    SetViewAngles(client);
-
-	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
-	float iRefreshCameraDelay = 0.0;
-	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.035;
-	else
-		iRefreshCameraDelay = 0.042;
-
-    CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-
-    return Plugin_Handled;
-}
-
 public Action Command_RotateCameraLeft(int client, int args)
 {
-    if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
-        return Plugin_Handled;
-	
-	StorePlayerViewAngles(client);
+    if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
 
-    switch(g_iCameraRotation[client])
-    {
-        case 0: g_iCameraRotation[client] = 90;
-        case 90: g_iCameraRotation[client] = 180;
-        case 180: g_iCameraRotation[client] = -90;
-        case -90: g_iCameraRotation[client] = 0;
-    }
+	RotateCameraAngle(client, 0);
+	return Plugin_Handled;
+}
 
-	SendConVarValue(client, g_hMpForceCamera, "0");
-    g_bMovementBlocked[client] = true;
-    
-    SetViewAngles(client);
+public Action Command_RotateCameraRight(int client, int args)
+{
+    if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
 
-	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
-	float iRefreshCameraDelay = 0.0;
-	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.035;
-	else
-		iRefreshCameraDelay = 0.042;
+	RotateCameraAngle(client, 1);
+	return Plugin_Handled;
+}
 
-    CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+public Action Command_RotateCamera180(int client, int args)
+{
+    if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
 
-    return Plugin_Handled;
+	RotateCameraAngle(client, 2);
+	return Plugin_Handled;
 }
 
 public Action Command_ToggleDiagonalCamera(int client, int args)
@@ -356,17 +335,7 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 	if (!IsValidClient(client) || !IsInFCStyle(client))
 		return Plugin_Handled;
 
-	StorePlayerViewAngles(client);
-	
-	g_bUseDiagonalCamera[client] = !g_bUseDiagonalCamera[client];
-	SendConVarValue(client, g_hMpForceCamera, "0");
-	g_bMovementBlocked[client] = true;
-
-	SetViewAngles(client);
-	CreateTimer(0.042, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-
-	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
-
+	RotateCameraAngle(client, 3);
 	return Plugin_Handled;
 }
 
@@ -500,15 +469,70 @@ public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
 
 // Functions -------------------------------------------------------------------------------
 
+void RotateCameraAngle(int client, int mode)
+{
+	StorePlayerViewAngles(client);
+    
+    if (mode == 0) // Rotate Left
+	{
+		switch(g_iCameraAngle[client])
+		{
+			case 0: g_iCameraAngle[client] = 90;
+			case 90: g_iCameraAngle[client] = 180;
+			case 180: g_iCameraAngle[client] = -90;
+			case -90: g_iCameraAngle[client] = 0;
+		}
+	}
+	else if (mode == 1) // Rotate Right
+	{
+		switch(g_iCameraAngle[client])
+		{
+			case 0: g_iCameraAngle[client] = -90;
+			case -90: g_iCameraAngle[client] = 180;
+			case 180: g_iCameraAngle[client] = 90;
+			case 90: g_iCameraAngle[client] = 0;
+		}
+	}
+	else if (mode == 2) // Rotate 180
+	{
+		switch(g_iCameraAngle[client])
+		{
+			case 0: g_iCameraAngle[client] = 180;
+			case 90: g_iCameraAngle[client] = -90;
+			case 180: g_iCameraAngle[client] = 0;
+			case -90: g_iCameraAngle[client] = 90;
+		}
+	}
+	else  // (mode == 3) Toggle Diagonal Angles
+	{
+		g_bUseDiagonalCamera[client] = !g_bUseDiagonalCamera[client];
+		g_bPressedHardcodedBind[client] = false;
+	}
+	
+	SendConVarValue(client, g_hMpForceCamera, "0");
+    g_bMovementBlocked[client] = true;
+    
+    SetViewAngles(client);
+
+	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
+	float iRefreshCameraDelay = 0.0;
+	if (g_bPressedHardcodedBind[client])
+		iRefreshCameraDelay = 0.035;
+	else
+		iRefreshCameraDelay = 0.042;
+
+    CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+}
+
 void SetViewAngles(int client)
 {
 	float idealAngles[3];
 	idealAngles[0] = 45.0;
 
 	if (!g_bUseDiagonalCamera[client])
-		idealAngles[1] = float(g_iCameraRotation[client]); 
+		idealAngles[1] = float(g_iCameraAngle[client]); 
 	else
-		idealAngles[1] = float(g_iCameraRotation[client] - 45);
+		idealAngles[1] = float(g_iCameraAngle[client] - 45);
 
 	idealAngles[2] = 0.0;  
 	
@@ -538,7 +562,7 @@ public void EnableThirdPerson(int client)
 		return;
 		
 	g_bThirdPersonEnabled[client] = true;
-	g_iCameraRotation[client] = 0;
+	g_iCameraAngle[client] = 0;
 
 	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
 	CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);

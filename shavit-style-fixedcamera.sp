@@ -40,7 +40,7 @@ public Plugin myinfo = {
 	name = "Shavit - Fixed Camera Style",
 	author = "devins, shinoum", 
 	description = "Fixed Camera Style for CS:S Bhop Timer",
-	version = "1.1.8",
+	version = "1.2.0",
 	url = "https://github.com/NSchrot/shavit-style-fixedcamera"
 }
 
@@ -94,14 +94,18 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fcfov", Command_ApplyFOV, "Apply User Inserted FOV");
 	RegConsoleCmd("sm_fov", Command_ApplyFOV, "Apply User Inserted FOV");
 
-	// Commands & Help
-	RegConsoleCmd("sm_fccommands", Command_Help, "Open Fixed Camera commands & help menu");
-	RegConsoleCmd("sm_fchelp", Command_Help, "Open Fixed Camera commands & help menu");
-
 	// Main Menu
 	RegConsoleCmd("sm_fcsettings", Command_MainMenu, "Open Fixed Camera settings menu");
 	RegConsoleCmd("sm_fcoptions", Command_MainMenu, "Open Fixed Camera settings menu");
 	RegConsoleCmd("sm_fcmenu", Command_MainMenu, "Open Fixed Camera settings menu");
+
+	// Camera Controls Menu
+	RegConsoleCmd("sm_fccamera", Command_CameraControlsMenu, "Open Camera Controls menu");
+	RegConsoleCmd("sm_fccameracontrols", Command_CameraControlsMenu, "Open Camera Controls menu");
+
+	// Commands & Help
+	RegConsoleCmd("sm_fccommands", Command_Help, "Open Fixed Camera commands & help menu");
+	RegConsoleCmd("sm_fchelp", Command_Help, "Open Fixed Camera commands & help menu");
 
 	// Cookies ---------
 
@@ -244,7 +248,7 @@ public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3
 			}
 		}
 		
-		if (buttons & IN_ATTACK3)
+		if (buttons & IN_ATTACK3) // this is not automatically bound by the game but can be used
 		{
 			if (!(g_iLastButtons[client] & IN_ATTACK3))
 			{
@@ -408,6 +412,16 @@ public Action Command_MainMenu(int client, int args)
 		return Plugin_Handled;
 
 	ShowMainMenu(client);
+
+	return Plugin_Handled;
+}
+
+public Action Command_CameraControlsMenu(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+
+	ShowCameraControlsMenu(client);
 
 	return Plugin_Handled;
 }
@@ -615,19 +629,16 @@ void ShowMainMenu(int client)
 	Menu menu = new Menu(MainMenuHandler, MENU_ACTIONS_DEFAULT);
 	menu.SetTitle("Fixed Camera\n \n");
 
-	char diagonalCameraStatus[32];
-	Format(diagonalCameraStatus, sizeof(diagonalCameraStatus), "Diagonal Camera: %s", g_bUseDiagonalCamera[client] ? "On" : "Off");
-	menu.AddItem("diagonalCamera", diagonalCameraStatus);
+	menu.AddItem("camControls", "Camera Controls");
+	menu.AddItem("fov", "FOV\n \n");
 	
 	char bindStatus[32];
 	Format(bindStatus, sizeof(bindStatus), "Shift / E Binds: %s", g_bUseHardcodedBinds[client] ? "On" : "Off");
 	menu.AddItem("binds", bindStatus);
 	
 	char nvgStatus[32];
-	Format(nvgStatus, sizeof(nvgStatus), "Night Vision: %s", g_bNightVisionIsEnabled[client] ? "On" : "Off");
+	Format(nvgStatus, sizeof(nvgStatus), "Night Vision: %s\n \n", g_bNightVisionIsEnabled[client] ? "On" : "Off");
 	menu.AddItem("nvg", nvgStatus);
-	
-	menu.AddItem("fov", "FOV\n \n");
 
 	menu.AddItem("help", "Commands & Help");
 	
@@ -644,10 +655,13 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (StrEqual(info, "diagonalCamera"))
+			if (StrEqual(info, "camControls"))
 			{
-				Command_ToggleDiagonalCamera(client, 0);
-				ShowMainMenu(client);
+				ShowCameraControlsMenu(client);
+			}
+			else if (StrEqual(info, "fov"))
+			{
+				ShowFovMenu(client);
 			}
 			else if (StrEqual(info, "binds"))
 			{
@@ -660,13 +674,74 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 				Command_ToggleNightVision(client, 0);
 				ShowMainMenu(client);
 			}
-			else if (StrEqual(info, "fov"))
-			{
-				ShowFovMenu(client);
-			}
 			else if (StrEqual(info, "help"))
 			{
 				ShowHelpMenu(client);
+			}
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+	
+	return 0;
+}
+
+void ShowCameraControlsMenu(int client)
+{
+	Menu menu = new Menu(CameraControlsMenuHandler, MENU_ACTIONS_DEFAULT);
+	
+	char title[64];
+	Format(title, sizeof(title), "Fixed Camera | Camera Controls\n \n/fchelp for binds\n \n");
+	menu.SetTitle(title);
+	
+	menu.AddItem("left", "Rotate Left");
+	menu.AddItem("right", "Rotate Right");
+	menu.AddItem("180", "Rotate 180\n \n");
+
+	char diagonalCameraStatus[32];
+	Format(diagonalCameraStatus, sizeof(diagonalCameraStatus), "Diagonal Camera: %s\n \n", g_bUseDiagonalCamera[client] ? "On" : "Off");
+	menu.AddItem("diagonalCamera", diagonalCameraStatus);
+
+	menu.AddItem("mainMenu", "Main Menu");
+	
+	menu.ExitButton = true;
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int CameraControlsMenuHandler(Menu menu, MenuAction action, int client, int option)
+{
+	switch(action)
+	{
+		case MenuAction_Select:
+		{
+			char info[32];
+			menu.GetItem(option, info, sizeof(info));
+			
+			if (g_bThirdPersonEnabled[client])
+			{
+				if (StrEqual(info, "left"))
+				{
+					Command_RotateCameraLeft(client, 0);
+				}
+				else if (StrEqual(info, "right"))
+				{
+					Command_RotateCameraRight(client, 0);
+				}
+				else if (StrEqual(info, "180"))
+				{
+					Command_RotateCamera180(client, 0);
+				}
+				else if (StrEqual(info, "diagonalCamera"))
+				{
+					Command_ToggleDiagonalCamera(client, 0);
+				}
+
+				if (StrEqual(info, "mainMenu"))
+					ShowMainMenu(client);
+				else
+					ShowCameraControlsMenu(client);					
 			}
 		}
 		case MenuAction_End:
@@ -689,7 +764,8 @@ void ShowFovMenu(int client)
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
 
-	menu.AddItem("default", "Set to Default\n \n");
+	menu.AddItem("default", "Set to Default");
+	menu.AddItem("gameDefault", "Set to Game Default\n \n");
 
 	menu.AddItem("back", "Back");
 	
@@ -732,6 +808,12 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 					SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
 				}
+				else if (StrEqual(info, "gameDefault"))
+				{
+					g_iFov[client] = 90;
+					SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
+					SaveSettingToCookie(g_cFovCookie, client, g_iFov[client]);
+				}
 				
 				if (StrEqual(info, "back"))
 					ShowMainMenu(client);
@@ -751,15 +833,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowHelpMenu(int client)
 {
     Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
-    menu.SetTitle("Fixed Camera | Commands & Help\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\n ");
-
-	menu.AddItem("", "/fcdiagonal: Toggle Diagonal Camera Angles", ITEMDRAW_DISABLED);
-	menu.AddItem("", "/fctogglebinds: Toggle Shift / E binds", ITEMDRAW_DISABLED);
-    menu.AddItem("", "/fcnvg: Toggle Night Vision", ITEMDRAW_DISABLED);
-	menu.AddItem("", "/fcfov: Adjust FOV (80-120)\n \n", ITEMDRAW_DISABLED);
-
-	menu.AddItem("", "/fcmenu: Main Menu", ITEMDRAW_DISABLED);
-	menu.AddItem("", "/fchelp: This Menu\n \n", ITEMDRAW_DISABLED);
+    menu.SetTitle("Fixed Camera | Commands & Help\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\nRotate Camera 180 Degrees: Bind a key to fc180\n \n/fcdiagonal: Toggle Diagonal Camera Angles\n/fctogglebinds: Toggle Shift / E binds\n/fcnvg: Toggle Night Vision\n/fcfov: Adjust FOV\n \n/fcmenu: Main Menu\n/fccamera: Camera Controls Menu\n/fchelp: This Menu\n \n");
 
     menu.AddItem("mainmenu", "Main Menu");
     menu.ExitButton = true;

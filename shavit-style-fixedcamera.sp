@@ -78,8 +78,6 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fchardcoded", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_hardcoded", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 	RegConsoleCmd("sm_fcusekeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
-	RegConsoleCmd("sm_fcbinds", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
-	RegConsoleCmd("sm_fckeys", Command_ToggleHardCodedBinds, "Toggle hardcoded Shift/E camera rotation binds");
 
 	// Nightvision
 	RegConsoleCmd("sm_fcnightvision", Command_ToggleNightVision, "Toggle Night Vision Goggles");
@@ -100,12 +98,13 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fcmenu", Command_MainMenu, "Open Fixed Camera settings menu");
 
 	// Camera Controls Menu
-	RegConsoleCmd("sm_fccamera", Command_CameraControlsMenu, "Open Camera Controls menu");
 	RegConsoleCmd("sm_fccameracontrols", Command_CameraControlsMenu, "Open Camera Controls menu");
+	RegConsoleCmd("sm_fccamera", Command_CameraControlsMenu, "Open Camera Controls menu");
 
-	// Commands & Help
-	RegConsoleCmd("sm_fccommands", Command_Help, "Open Fixed Camera commands & help menu");
-	RegConsoleCmd("sm_fchelp", Command_Help, "Open Fixed Camera commands & help menu");
+	// Commands & Binds
+	RegConsoleCmd("sm_fccommands", Command_Help, "Open Fixed Camera Commands & Binds menu");
+	RegConsoleCmd("sm_fcbinds", Command_Help, "Open Fixed Camera Commands & Binds menu");
+	RegConsoleCmd("sm_fchelp", Command_Help, "Open Fixed Camera Commands & Binds menu");
 
 	// Cookies ---------
 
@@ -206,7 +205,7 @@ public void OnClientDisconnect(int client)
 	g_bMovementBlocked[client] = false;
 }
 
-// fix for fov being reset after dropping or picking up a weapon
+// This fixes a bug where the FOV would be reset when dropping or picking up a weapon
 public void OnClientPostThinkPost(int client)
 {
 	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
@@ -340,6 +339,7 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 		return Plugin_Handled;
 
 	RotateCameraAngle(client, 3);
+	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
 	return Plugin_Handled;
 }
 
@@ -444,7 +444,7 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
 		SetViewAngles(client);
-		CreateTimer(0.05, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.1, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
 	}
@@ -640,7 +640,7 @@ void ShowMainMenu(int client)
 	Format(nvgStatus, sizeof(nvgStatus), "Night Vision: %s\n \n", g_bNightVisionIsEnabled[client] ? "On" : "Off");
 	menu.AddItem("nvg", nvgStatus);
 
-	menu.AddItem("help", "Commands & Help");
+	menu.AddItem("help", "Commands & Binds");
 	
 	menu.ExitButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
@@ -693,7 +693,7 @@ void ShowCameraControlsMenu(int client)
 	Menu menu = new Menu(CameraControlsMenuHandler, MENU_ACTIONS_DEFAULT);
 	
 	char title[64];
-	Format(title, sizeof(title), "Fixed Camera | Camera Controls\n \n/fchelp for binds\n \n");
+	Format(title, sizeof(title), "Fixed Camera | Camera Controls\n \nType /fchelp for binds\n \n");
 	menu.SetTitle(title);
 	
 	menu.AddItem("left", "Rotate Left");
@@ -833,7 +833,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowHelpMenu(int client)
 {
     Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
-    menu.SetTitle("Fixed Camera | Commands & Help\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\nRotate Camera 180 Degrees: Bind a key to fc180\n \n/fcdiagonal: Toggle Diagonal Camera Angles\n/fctogglebinds: Toggle Shift / E binds\n/fcnvg: Toggle Night Vision\n/fcfov: Adjust FOV\n \n/fcmenu: Main Menu\n/fccamera: Camera Controls Menu\n/fchelp: This Menu\n \n");
+    menu.SetTitle("Fixed Camera | Commands & Binds\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\nRotate Camera 180 Degrees: Bind a key to fc180\nToggle Diagonal Camera: Bind a key to fcdiagonal\n \nBind Example: bind mouse3 fc180\n \n/fcfov: Adjust FOV\n/fctogglebinds: Toggle Shift / E binds\n/fcnvg: Toggle Night Vision\n \n/fcmenu: Main Menu\n/fccamera: Camera Controls Menu\n/fchelp: This Menu\n \n");
 
     menu.AddItem("mainmenu", "Main Menu");
     menu.ExitButton = true;

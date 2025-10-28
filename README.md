@@ -33,37 +33,44 @@
 | Command         | Key/Usage     | Description                              |
 |-----------------|---------------|------------------------------------------|
 | `/fcmenu`       | -             | Open the Fixed Camera settings menu      |
-| `/fccommands`   | -             | Show all Fixed Camera commands           |
-| `/fchelp`       | -             | Alias for `/fccommands`                  |
+| `/fchelp`       | -             | Show all Fixed Camera commands and binds |
 | `/fcdiagonal`   | -             | Toggle diagonal camera angle             |
-| `/fctogglebinds`| -             | Toggle auto-binded rotation On/Off       |
 | `/fcnvg`        | -             | Toggle night vision                      |
-| `/fcfov <val>`  | -             | Set camera FOV (80-120)                  |
-| `fcleft`        | -             | Rotate camera left                       |
-| `fcright`       | -             | Rotate camera right                      |
+| `/fcfov <val>`  | -             | Set camera FOV                           |
+| `/fctogglebinds`| -             | Toggle auto-binded camera rotation       |
 | `+speed`        | **Shift**     | Rotate camera left (if enabled)          |
 | `+use`          | **E**         | Rotate camera right (if enabled)         |
+| `fcleft`        | -             | Rotate camera left                       |
+| `fcright`       | -             | Rotate camera right                      |
+| `fc180  `       | -             | Rotate camera 180 degrees                |
 
 
 ## Usage
 
-1. Select **Fixed Camera** style in the `!style` menu
+1. Select **Fixed Camera** style in the `/style` menu
 2. Camera switches to third-person automatically
-3. Use **Shift/E** or manual commands to rotate the camera
-4. Use `/fcmenu` for all settings (FOV, binds, night vision, etc)
+3. Use **Shift / E** or manual commands to rotate the camera
+4. Use `/fcmenu` for all settings (Camera Rotation, FOV, Binds, Night Vision, etc)
 5. Use `/fchelp` for a quick in-game reference of all commands
 
 ## Menu System
 
-- **Settings Menu**:  
-  - Toggle Shift/E binds  
-  - Toggle night vision  
-  - Adjust FOV (80-120)  
-  - Access commands
+- **Main Menu**:  
+  - Camera Controls Menu
+  - FOV Menu
+  - Toggle Shift/E Binds  
+  - Toggle Night Vision  
+  - Commands Menu
+
+- **Camera Controls Menu**:  
+  - Full Camera Rotation options (Rotate Left, Right, 180, Toggle Diagonal Angles)
+
+- **FOV Menu**:  
+  - FOV options
 
 - **Commands Menu**:  
-  - Shows all available commands  
-  - Accessible via `/fchelp` or `/fccommands`
+  - Shows available commands and binds
+  - Accessible via `/fchelp`, `/fccommands` or `/fcbinds`
 
 
 ## Configuration Example
@@ -71,12 +78,14 @@
 Add to your `shavit-styles.cfg`:
 
 ```json
-"FixedCamera"
+"<styleNumber>"
 {
     "name"              "Fixed Camera"
-    "shortname"         "FC"
+    "shortname"         "Fixed"
+    "clantag"           "Fixed"
     "htmlcolor"         "FFFFFF"
-    "specialstring"     "fixedcamera"
+    "command"           "fc; fixed; fixedcamera"
+    "specialstring"     "fixedcamera; bash_bypass"
     // ... other style settings
 }
 ```
@@ -97,14 +106,16 @@ Add to your `shavit-styles.cfg`:
 
 ## Troubleshooting
 
-- **Camera not activating**:  
-  Ensure your style has `"specialstring" "fixedcamera"` in the Shavit config.
+- **Camera is not switching to fixed mode when entering style**:  
+  Ensure your style configuration has `"specialstring" "fixedcamera"` inside shavit-styles.cfg.
 
-- **Keys not working**:  
-  Use `/fctogglebinds` or try manual commands (`fcright`, `fcleft`).
+- **Camera Rotation binds not working**:  
+  Type `/fctogglebinds`, ensure that it is enabled and also check if your **Shift / E** keys are bound to +speed and +use respectively. 
+  It is also possible to bind the camera controls to a key manually (`/fchelp` to see binds and commands)
 
 - **Can't switch weapons**:  
   This is a limitation of the third-person implementation, which uses the Spectator Camera. Unless the camera system is somehow changed, this can't be fixed.
+  The workaround is to get a weapon by typing it's related command: `/glock`, `/usp`, etc.
 
 
 ---

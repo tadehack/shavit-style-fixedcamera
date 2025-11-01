@@ -463,7 +463,7 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 
 		RestorePlayerViewAngles(client);
 		
-		CreateTimer(0.01, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.055, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
 	return Plugin_Stop;
@@ -529,11 +529,12 @@ void RotateCameraAngle(int client, int mode)
     SetViewAngles(client);
 
 	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
+	// so we need a slightly higher timer for manual binds
 	float iRefreshCameraDelay = 0.0;
 	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.035;
+		iRefreshCameraDelay = 0.055;
 	else
-		iRefreshCameraDelay = 0.042;
+		iRefreshCameraDelay = 0.065;
 
     CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 }
@@ -764,8 +765,8 @@ void ShowFovMenu(int client)
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
 
-	menu.AddItem("default", "Set to Default");
-	menu.AddItem("gameDefault", "Set to Game Default\n \n");
+	menu.AddItem("default", "Default");
+	menu.AddItem("gameDefault", "Game Default\n \n");
 
 	menu.AddItem("back", "Back");
 	

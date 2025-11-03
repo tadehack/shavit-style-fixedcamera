@@ -28,8 +28,10 @@ int g_iMinFov = 80;
 int g_iMaxFov = 125;
 
 float g_fStoredAngles[MAXPLAYERS + 1][3];
+float g_fCameraDelayOffset[MAXPLAYERS + 1];
 
 Cookie g_cUseDiagonalCameraCookie;
+Cookie g_cCameraDelayOffsetCookie;
 Cookie g_cUseHardCodedBindsCookie;
 Cookie g_cNvgCookie;
 Cookie g_cFovCookie;
@@ -40,7 +42,7 @@ public Plugin myinfo = {
 	name = "Shavit - Fixed Camera Style",
 	author = "devins, shinoum", 
 	description = "Fixed Camera Style for CS:S Bhop Timer",
-	version = "1.2.0",
+	version = "1.2.1",
 	url = "https://github.com/NSchrot/shavit-style-fixedcamera"
 }
 
@@ -101,15 +103,23 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fccameracontrols", Command_CameraControlsMenu, "Open Camera Controls menu");
 	RegConsoleCmd("sm_fccamera", Command_CameraControlsMenu, "Open Camera Controls menu");
 
+	// Camera Delay Offset Menu
+	RegConsoleCmd("sm_fccameradelayoffset", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fccameraoffset", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fccameradelay", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fcoffset", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fcdelay", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+
 	// Commands & Binds
 	RegConsoleCmd("sm_fccommands", Command_Help, "Open Fixed Camera Commands & Binds menu");
 	RegConsoleCmd("sm_fcbinds", Command_Help, "Open Fixed Camera Commands & Binds menu");
 	RegConsoleCmd("sm_fchelp", Command_Help, "Open Fixed Camera Commands & Binds menu");
 
-	// Cookies ---------
+	// Initialize Cookies ---------
 
 	g_cUseDiagonalCameraCookie = new Cookie("Toggle_Diagonal", "Diagonal Camera state", CookieAccess_Protected);
-	g_cUseHardCodedBindsCookie = new Cookie("Toggle_HardCodedKeys", "Toggle Hardcoded binds state", CookieAccess_Protected);
+	g_cCameraDelayOffsetCookie = new Cookie("CameraDelayOffset", "Camera Delay Offset state", CookieAccess_Protected);
+	g_cUseHardCodedBindsCookie = new Cookie("Toggle_HardCodedKeys", "Toggle Hardcoded Binds state", CookieAccess_Protected);
 	g_cNvgCookie = new Cookie("nvg", "nvg state", CookieAccess_Protected);
 	g_cFovCookie = new Cookie("fov", "fov state", CookieAccess_Protected);
 
@@ -158,6 +168,18 @@ public void OnClientCookiesCached(int client)
 	else
 	{
 	    g_bUseDiagonalCamera[client] = (StringToInt(buffer) == 1);
+	}
+
+	// Load Camera Delay Offset cookie
+	g_cCameraDelayOffsetCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_fCameraDelayOffset[client] = 0.0;
+		g_cCameraDelayOffsetCookie.Set(client, "0.0");
+	}
+	else
+	{
+		g_fCameraDelayOffset[client] = StringToFloat(buffer);
 	}
 	
 	// Load Use Hardcoded binds cookie
@@ -426,6 +448,16 @@ public Action Command_CameraControlsMenu(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action Command_CameraDelayOffsetMenu(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+
+	ShowCameraDelayOffsetMenu(client);
+
+	return Plugin_Handled;
+}
+
 public Action Command_Help(int client, int args)
 {
 	if (!IsValidClient(client) || !IsInFCStyle(client))
@@ -532,9 +564,9 @@ void RotateCameraAngle(int client, int mode)
 	// so we need a slightly higher timer for manual binds
 	float iRefreshCameraDelay = 0.0;
 	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.055;
+		iRefreshCameraDelay = 0.055 + g_fCameraDelayOffset[client];
 	else
-		iRefreshCameraDelay = 0.065;
+		iRefreshCameraDelay = 0.065 + g_fCameraDelayOffset[client];
 
     CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 }
@@ -623,11 +655,19 @@ public void SaveSettingToCookie(Cookie cookie, int client, int value)
 	cookie.Set(client, buffer);
 }
 
+public void SaveFloatSettingToCookie(Cookie cookie, int client, float value)
+{
+	char buffer[8];
+	Format(buffer, sizeof(buffer), "%f", value);
+	cookie.Set(client, buffer);
+}
+
 // Menus ------------------------------------------------------------------------
 
 void ShowMainMenu(int client)
 {
 	Menu menu = new Menu(MainMenuHandler, MENU_ACTIONS_DEFAULT);
+
 	menu.SetTitle("Fixed Camera\n \n");
 
 	menu.AddItem("camControls", "Camera Controls");
@@ -692,10 +732,8 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowCameraControlsMenu(int client)
 {
 	Menu menu = new Menu(CameraControlsMenuHandler, MENU_ACTIONS_DEFAULT);
-	
-	char title[64];
-	Format(title, sizeof(title), "Fixed Camera | Camera Controls\n \nType /fchelp for binds\n \n");
-	menu.SetTitle(title);
+
+	menu.SetTitle("Fixed Camera | Camera Controls\n \nType /fchelp for binds\n \n");
 	
 	menu.AddItem("left", "Rotate Left");
 	menu.AddItem("right", "Rotate Right");
@@ -705,7 +743,9 @@ void ShowCameraControlsMenu(int client)
 	Format(diagonalCameraStatus, sizeof(diagonalCameraStatus), "Diagonal Camera: %s\n \n", g_bUseDiagonalCamera[client] ? "On" : "Off");
 	menu.AddItem("diagonalCamera", diagonalCameraStatus);
 
-	menu.AddItem("mainMenu", "Main Menu");
+	menu.AddItem("cameraDelayOffsetMenu", "Camera Delay Offset\n \n");
+
+	menu.AddItem("mainMenu", "Back");
 	
 	menu.ExitButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
@@ -723,26 +763,85 @@ public int CameraControlsMenuHandler(Menu menu, MenuAction action, int client, i
 			if (g_bThirdPersonEnabled[client])
 			{
 				if (StrEqual(info, "left"))
-				{
 					Command_RotateCameraLeft(client, 0);
-				}
 				else if (StrEqual(info, "right"))
-				{
 					Command_RotateCameraRight(client, 0);
-				}
 				else if (StrEqual(info, "180"))
-				{
 					Command_RotateCamera180(client, 0);
-				}
 				else if (StrEqual(info, "diagonalCamera"))
-				{
-					Command_ToggleDiagonalCamera(client, 0);
-				}
+					Command_ToggleDiagonalCamera(client, 0);		
 
 				if (StrEqual(info, "mainMenu"))
 					ShowMainMenu(client);
+				else if (StrEqual(info, "cameraDelayOffsetMenu"))
+					ShowCameraDelayOffsetMenu(client);
 				else
 					ShowCameraControlsMenu(client);					
+			}
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+	
+	return 0;
+}
+
+void ShowCameraDelayOffsetMenu(int client)
+{
+	Menu menu = new Menu(CameraDelayOffsetMenuHandler, MENU_ACTIONS_DEFAULT);
+	
+	menu.SetTitle("Fixed Camera | Camera Delay Offset\n \nWARNING: Only adjust this setting if you have high ping\nand is experiencing issues when switching camera angles,\nsuch as the vertical camera angle not applying properly.\n(Negative values are not recommended, unless playing on LAN)\n \nCurrent Offset: %.2f\n \n ", g_fCameraDelayOffset[client] + 0.001);
+	
+	menu.AddItem("increase", "++");
+	menu.AddItem("decrease", "--\n \n");
+
+	menu.AddItem("default", "Default\n \n");
+
+	menu.AddItem("back", "Back");
+	
+	menu.ExitButton = true;
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int CameraDelayOffsetMenuHandler(Menu menu, MenuAction action, int client, int option)
+{
+	switch(action)
+	{
+		case MenuAction_Select:
+		{
+			char info[32];
+			menu.GetItem(option, info, sizeof(info));
+			
+			if (g_bThirdPersonEnabled[client])
+			{
+				if (StrEqual(info, "increase"))
+				{
+					if (g_fCameraDelayOffset[client] < 0.09)
+					{
+						g_fCameraDelayOffset[client] += 0.01;
+						SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
+					}
+				}
+				else if (StrEqual(info, "decrease"))
+				{
+					if (g_fCameraDelayOffset[client] > -0.03)
+					{
+						g_fCameraDelayOffset[client] -= 0.01;
+						SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
+					}
+				}
+				else if (StrEqual(info, "default"))
+				{
+					g_fCameraDelayOffset[client] = 0.0;
+					SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
+				}
+
+				if (StrEqual(info, "back"))
+					ShowCameraControlsMenu(client);
+				else
+					ShowCameraDelayOffsetMenu(client);
 			}
 		}
 		case MenuAction_End:
@@ -757,10 +856,8 @@ public int CameraControlsMenuHandler(Menu menu, MenuAction action, int client, i
 void ShowFovMenu(int client)
 {
 	Menu menu = new Menu(FovMenuHandler, MENU_ACTIONS_DEFAULT);
-	
-	char title[64];
-	Format(title, sizeof(title), "Fixed Camera | FOV\n \nCurrent FOV: %d\n ", g_iFov[client]);
-	menu.SetTitle(title);
+
+	menu.SetTitle("Fixed Camera | FOV\n \nCurrent FOV: %d\n ", g_iFov[client]);
 	
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
@@ -834,7 +931,8 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowHelpMenu(int client)
 {
     Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
-    menu.SetTitle("Fixed Camera | Commands & Binds\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\nRotate Camera 180 Degrees: Bind a key to fc180\nToggle Diagonal Camera: Bind a key to fcdiagonal\n \nBind Example: bind mouse3 fc180\n \n/fcfov: Adjust FOV\n/fctogglebinds: Toggle Shift / E binds\n/fcnvg: Toggle Night Vision\n \n/fcmenu: Main Menu\n/fccamera: Camera Controls Menu\n/fchelp: This Menu\n \n");
+
+    menu.SetTitle("Fixed Camera | Commands & Binds\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\nRotate Camera 180 Degrees: Bind a key to fc180\nToggle Diagonal Camera: Bind a key to fcdiagonal\n \nBind Example: bind mouse3 fc180\n \n/fcfov: Adjust FOV\n/fctogglebinds: Toggle Shift / E binds\n/fcnvg: Toggle Night Vision\n \n/fcmenu: Main Menu\n/fccamera: Camera Controls Menu\n/fcdelay: Camera Delay Offset Menu\n/fchelp: This Menu\n \n");
 
     menu.AddItem("mainmenu", "Main Menu");
     menu.ExitButton = true;

@@ -29,6 +29,7 @@ int g_iMaxFov = 125;
 
 float g_fStoredAngles[MAXPLAYERS + 1][3];
 float g_fCameraDelayOffset[MAXPLAYERS + 1];
+float idealAngles[3];
 
 Cookie g_cUseDiagonalCameraCookie;
 Cookie g_cCameraDelayOffsetCookie;
@@ -489,13 +490,27 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 	int client = GetClientFromSerial(serial);
 	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
 	{
+		SendConVarValue(client, g_hMpForceCamera, "1");
 		SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
 		SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 
+		CreateTimer(0.05 + g_fCameraDelayOffset[client], Timer_RestorePlayerViewAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	return Plugin_Stop;
+}
+
+public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
+{
+	int client = GetClientFromSerial(serial);
+	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	{
 		RestorePlayerViewAngles(client);
-		
-		CreateTimer(0.055, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+		//Shavit_PrintToChat(client, "Restored View Angles");
+
+		CreateTimer(0.01 + g_fCameraDelayOffset[client] + 0.02, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
 	return Plugin_Stop;
@@ -508,6 +523,8 @@ public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
 	{
 		g_bMovementBlocked[client] = false;
 		g_bPressedHardcodedBind[client] = false;
+
+		//Shavit_PrintToChat(client, "Re-enabled Movement Keys");
 	}
 
 	return Plugin_Stop;
@@ -564,16 +581,16 @@ void RotateCameraAngle(int client, int mode)
 	// so we need a slightly higher timer for manual binds
 	float iRefreshCameraDelay = 0.0;
 	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.055 + g_fCameraDelayOffset[client];
+		iRefreshCameraDelay = 0.015 + g_fCameraDelayOffset[client];
 	else
-		iRefreshCameraDelay = 0.065 + g_fCameraDelayOffset[client];
+		iRefreshCameraDelay = 0.025 + g_fCameraDelayOffset[client];
 
     CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 void SetViewAngles(int client)
 {
-	float idealAngles[3];
+	// high ping fix: maybe we should set this variable as global and make it a client var as well?
 	idealAngles[0] = 45.0;
 
 	if (!g_bUseDiagonalCamera[client])
@@ -581,8 +598,11 @@ void SetViewAngles(int client)
 	else
 		idealAngles[1] = float(g_iCameraAngle[client] - 45);
 
+	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
+
 	idealAngles[2] = 0.0;  
 	
+	// high ping fix: maybe we should only teleport the entity after the last Timer_RefreshCameraAngle timer?
 	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
 }
 
@@ -599,7 +619,6 @@ public void RestorePlayerViewAngles(int client)
     if(!IsValidClient(client))
         return;
 
-	SendConVarValue(client, g_hMpForceCamera, "1");
 	TeleportEntity(client, NULL_VECTOR, g_fStoredAngles[client], NULL_VECTOR);
 }
 
@@ -792,7 +811,7 @@ void ShowCameraDelayOffsetMenu(int client)
 {
 	Menu menu = new Menu(CameraDelayOffsetMenuHandler, MENU_ACTIONS_DEFAULT);
 	
-	menu.SetTitle("Fixed Camera | Camera Delay Offset\n \nWARNING: Only adjust this setting if you have high ping\nand is experiencing issues when switching camera angles,\nsuch as the vertical camera angle not applying properly.\n(Negative values are not recommended, unless playing on LAN)\n \nCurrent Offset: %.2f\n \n ", g_fCameraDelayOffset[client] + 0.001);
+	menu.SetTitle("Fixed Camera | Camera Delay Offset\n \nWARNING: Only adjust this setting if you have high ping and is\nexperiencing issues when switching camera angles, such as:\n \n- Camera angle not applying properly when switching angles\n- Loosing speed when rotating the camera while holding a movement key\n \n \nCurrent Offset: %.2f\n \n ", g_fCameraDelayOffset[client] + 0.001);
 	
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
@@ -818,17 +837,17 @@ public int CameraDelayOffsetMenuHandler(Menu menu, MenuAction action, int client
 			{
 				if (StrEqual(info, "increase"))
 				{
-					if (g_fCameraDelayOffset[client] < 0.09)
+					if (g_fCameraDelayOffset[client] < 0.29)
 					{
-						g_fCameraDelayOffset[client] += 0.01;
+						g_fCameraDelayOffset[client] += 0.02;
 						SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
 					}
 				}
 				else if (StrEqual(info, "decrease"))
 				{
-					if (g_fCameraDelayOffset[client] > -0.03)
+					if (g_fCameraDelayOffset[client] > 0.01)
 					{
-						g_fCameraDelayOffset[client] -= 0.01;
+						g_fCameraDelayOffset[client] -= 0.02;
 						SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
 					}
 				}

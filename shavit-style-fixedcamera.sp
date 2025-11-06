@@ -21,6 +21,7 @@ bool g_bPressedHardcodedBind[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 bool g_bMovementBlocked[MAXPLAYERS + 1];
 
+int g_iOptimizeForPingMode[MAXPLAYERS+1];
 int g_iCameraAngle[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
 int g_iFov[MAXPLAYERS + 1];
@@ -31,6 +32,7 @@ float g_fStoredAngles[MAXPLAYERS + 1][3];
 float g_fCameraDelayOffset[MAXPLAYERS + 1];
 float idealAngles[3];
 
+Cookie g_cOptimizeForPingModeCookie;
 Cookie g_cUseDiagonalCameraCookie;
 Cookie g_cCameraDelayOffsetCookie;
 Cookie g_cUseHardCodedBindsCookie;
@@ -43,7 +45,7 @@ public Plugin myinfo = {
 	name = "Shavit - Fixed Camera Style",
 	author = "devins, shinoum", 
 	description = "Fixed Camera Style for CS:S Bhop Timer",
-	version = "1.2.1",
+	version = "1.3.0",
 	url = "https://github.com/NSchrot/shavit-style-fixedcamera"
 }
 
@@ -118,6 +120,7 @@ public void OnPluginStart()
 
 	// Initialize Cookies ---------
 
+	g_cOptimizeForPingModeCookie = new Cookie("OptimizeForPingMode", "Optimize for Ping Mode state", CookieAccess_Protected);
 	g_cUseDiagonalCameraCookie = new Cookie("Toggle_Diagonal", "Diagonal Camera state", CookieAccess_Protected);
 	g_cCameraDelayOffsetCookie = new Cookie("CameraDelayOffset", "Camera Delay Offset state", CookieAccess_Protected);
 	g_cUseHardCodedBindsCookie = new Cookie("Toggle_HardCodedKeys", "Toggle Hardcoded Binds state", CookieAccess_Protected);
@@ -181,6 +184,18 @@ public void OnClientCookiesCached(int client)
 	else
 	{
 		g_fCameraDelayOffset[client] = StringToFloat(buffer);
+	}
+
+	// Load Optimize for Ping Mode cookie
+	g_cOptimizeForPingModeCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_iOptimizeForPingMode[client] = 1;
+		g_cOptimizeForPingModeCookie.Set(client, "1");
+	}
+	else
+	{
+		g_iOptimizeForPingMode[client] = StringToInt(buffer);
 	}
 	
 	// Load Use Hardcoded binds cookie
@@ -495,7 +510,8 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 		SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 
-		CreateTimer(0.05 + g_fCameraDelayOffset[client], Timer_RestorePlayerViewAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		// add ifs for "optimize for *** ping"
+		CreateTimer(0.04 + g_fCameraDelayOffset[client], Timer_RestorePlayerViewAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
 	return Plugin_Stop;
@@ -510,7 +526,8 @@ public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
 
 		//Shavit_PrintToChat(client, "Restored View Angles");
 
-		CreateTimer(0.01 + g_fCameraDelayOffset[client] + 0.02, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		// add ifs for "optimize for *** ping"
+		CreateTimer(0.03 + g_fCameraDelayOffset[client], Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
 	return Plugin_Stop;
@@ -579,13 +596,15 @@ void RotateCameraAngle(int client, int mode)
 
 	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
 	// so we need a slightly higher timer for manual binds
+	
+	// add ifs for "optimize for *** ping"
 	float iRefreshCameraDelay = 0.0;
 	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.015 + g_fCameraDelayOffset[client];
-	else
 		iRefreshCameraDelay = 0.025 + g_fCameraDelayOffset[client];
+	else
+		iRefreshCameraDelay = 0.035 + g_fCameraDelayOffset[client];
 
-    CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 void SetViewAngles(int client)
@@ -811,12 +830,28 @@ void ShowCameraDelayOffsetMenu(int client)
 {
 	Menu menu = new Menu(CameraDelayOffsetMenuHandler, MENU_ACTIONS_DEFAULT);
 	
-	menu.SetTitle("Fixed Camera | Camera Delay Offset\n \nWARNING: Only adjust this setting if you have high ping and is\nexperiencing issues when switching camera angles, such as:\n \n- Camera angle not applying properly when switching angles\n- Loosing speed when rotating the camera while holding a movement key\n \n \nCurrent Offset: %.2f\n \n ", g_fCameraDelayOffset[client] + 0.001);
+	menu.SetTitle("Fixed Camera | Camera Delay Offset\n \nWARNING: Only adjust this setting if you have high ping and is\nexperiencing issues when switching camera angles, such as:\n \n- Camera angle not applying properly when switching angles\n- Loosing speed when rotating the camera while holding a movement key\n \n \nCurrent Offset: %.2f\n \n", g_fCameraDelayOffset[client] + 0.001);
 	
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
 
 	menu.AddItem("default", "Default\n \n");
+
+	char optimizeForPingMode[64];
+    if (g_iOptimizeForPingMode[client] == 0)
+        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: LAN (Not recommended if playing on a server)\n \n");
+    else if (g_iOptimizeForPingMode[client] == 1)
+        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Low Ping (1-15)\n \n");
+    else if (g_iOptimizeForPingMode[client] == 2)
+        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Medium Ping (15-50)\n \n");
+    else if (g_iOptimizeForPingMode[client] == 3)
+        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: High Ping (50-100)\n \n");
+	else if (g_iOptimizeForPingMode[client] == 4)
+        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Very High Ping (100-150)\n \n");
+	else if (g_iOptimizeForPingMode[client] == 5)
+        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Unplayable Ping (150-Unsupported)\n \n");
+    
+    menu.AddItem("optimizeForPingMode", optimizeForPingMode);
 
 	menu.AddItem("back", "Back");
 	
@@ -855,6 +890,11 @@ public int CameraDelayOffsetMenuHandler(Menu menu, MenuAction action, int client
 				{
 					g_fCameraDelayOffset[client] = 0.0;
 					SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
+				}
+				else if (StrEqual(info, "optimizeForPingMode"))
+				{
+					g_iOptimizeForPingMode[client] = (g_iOptimizeForPingMode[client] + 1) % 6;
+					SaveSettingToCookie(g_cOptimizeForPingModeCookie, client, g_iOptimizeForPingMode[client]);
 				}
 
 				if (StrEqual(info, "back"))

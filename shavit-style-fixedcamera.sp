@@ -522,9 +522,9 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 			case 3: // High Ping (50-100)
 				iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
 			case 4: // Very High Ping (100-150)
-				iRefreshCameraDelay = 0.060 + g_fCameraDelayOffset[client];
+				iRefreshCameraDelay = 0.110 + g_fCameraDelayOffset[client];
 			case 5: // Unplayable Ping (150+)
-				iRefreshCameraDelay = 0.100 + g_fCameraDelayOffset[client];
+				iRefreshCameraDelay = 0.160 + g_fCameraDelayOffset[client];
 		}
 
 		CreateTimer(iRefreshCameraDelay + g_fCameraDelayOffset[client], Timer_RestorePlayerViewAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
@@ -552,9 +552,9 @@ public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
 			case 3: // High Ping (50-100)
 				iRefreshCameraDelay = 0.040 + g_fCameraDelayOffset[client];
 			case 4: // Very High Ping (100-150)
-				iRefreshCameraDelay = 0.070 + g_fCameraDelayOffset[client];
+				iRefreshCameraDelay = 0.120 + g_fCameraDelayOffset[client];
 			case 5: // Unplayable Ping (150+)
-				iRefreshCameraDelay = 0.112 + g_fCameraDelayOffset[client];
+				iRefreshCameraDelay = 0.172 + g_fCameraDelayOffset[client];
 		}
 		
 		CreateTimer(iRefreshCameraDelay + g_fCameraDelayOffset[client], Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);

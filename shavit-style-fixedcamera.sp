@@ -510,8 +510,24 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 		SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 
-		// add ifs for "optimize for *** ping"
-		CreateTimer(0.04 + g_fCameraDelayOffset[client], Timer_RestorePlayerViewAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		float iRefreshCameraDelay = 0.0;
+		switch (g_iOptimizeForPingMode[client])
+		{
+			case 0: // LAN
+				iRefreshCameraDelay = 0.005 + g_fCameraDelayOffset[client]; // we don't even need delay for LAN
+			case 1: // Low Ping (1-15)
+				iRefreshCameraDelay = 0.010 + g_fCameraDelayOffset[client];
+			case 2: // Medium Ping (15-50)
+				iRefreshCameraDelay = 0.020 + g_fCameraDelayOffset[client];
+			case 3: // High Ping (50-100)
+				iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
+			case 4: // Very High Ping (100-150)
+				iRefreshCameraDelay = 0.060 + g_fCameraDelayOffset[client];
+			case 5: // Unplayable Ping (150+)
+				iRefreshCameraDelay = 0.100 + g_fCameraDelayOffset[client];
+		}
+
+		CreateTimer(iRefreshCameraDelay + g_fCameraDelayOffset[client], Timer_RestorePlayerViewAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
 	return Plugin_Stop;
@@ -524,10 +540,24 @@ public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
 	{
 		RestorePlayerViewAngles(client);
 
-		//Shavit_PrintToChat(client, "Restored View Angles");
-
-		// add ifs for "optimize for *** ping"
-		CreateTimer(0.03 + g_fCameraDelayOffset[client], Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		float iRefreshCameraDelay = 0.0;
+		switch (g_iOptimizeForPingMode[client])
+		{
+			case 0: // LAN
+				iRefreshCameraDelay = 0.010 + g_fCameraDelayOffset[client];
+			case 1: // Low Ping (1-15)
+				iRefreshCameraDelay = 0.020 + g_fCameraDelayOffset[client];
+			case 2: // Medium Ping (15-50)
+				iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
+			case 3: // High Ping (50-100)
+				iRefreshCameraDelay = 0.040 + g_fCameraDelayOffset[client];
+			case 4: // Very High Ping (100-150)
+				iRefreshCameraDelay = 0.070 + g_fCameraDelayOffset[client];
+			case 5: // Unplayable Ping (150+)
+				iRefreshCameraDelay = 0.112 + g_fCameraDelayOffset[client];
+		}
+		
+		CreateTimer(iRefreshCameraDelay + g_fCameraDelayOffset[client], Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
 	return Plugin_Stop;
@@ -594,15 +624,27 @@ void RotateCameraAngle(int client, int mode)
     
     SetViewAngles(client);
 
+	float iRefreshCameraDelay = 0.0;
+	switch (g_iOptimizeForPingMode[client])
+	{
+		case 0: // LAN
+			iRefreshCameraDelay = 0.010 + g_fCameraDelayOffset[client];
+		case 1: // Low Ping (1-15)
+			iRefreshCameraDelay = 0.015 + g_fCameraDelayOffset[client];
+		case 2: // Medium Ping (15-50)
+			iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
+		case 3: // High Ping (50-100)
+			iRefreshCameraDelay = 0.065 + g_fCameraDelayOffset[client];
+		case 4: // Very High Ping (100-150)
+			iRefreshCameraDelay = 0.100 + g_fCameraDelayOffset[client];
+		case 5: // Unplayable Ping (150+)
+			iRefreshCameraDelay = 0.200 + g_fCameraDelayOffset[client];
+	}
+
 	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
 	// so we need a slightly higher timer for manual binds
-	
-	// add ifs for "optimize for *** ping"
-	float iRefreshCameraDelay = 0.0;
-	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.025 + g_fCameraDelayOffset[client];
-	else
-		iRefreshCameraDelay = 0.035 + g_fCameraDelayOffset[client];
+	if (!g_bPressedHardcodedBind[client])
+		iRefreshCameraDelay += 0.010;
 
 	CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 }
@@ -838,18 +880,21 @@ void ShowCameraDelayOffsetMenu(int client)
 	menu.AddItem("default", "Default\n \n");
 
 	char optimizeForPingMode[64];
-    if (g_iOptimizeForPingMode[client] == 0)
-        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: LAN (Not recommended if playing on a server)\n \n");
-    else if (g_iOptimizeForPingMode[client] == 1)
-        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Low Ping (1-15)\n \n");
-    else if (g_iOptimizeForPingMode[client] == 2)
-        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Medium Ping (15-50)\n \n");
-    else if (g_iOptimizeForPingMode[client] == 3)
-        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: High Ping (50-100)\n \n");
-	else if (g_iOptimizeForPingMode[client] == 4)
-        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Very High Ping (100-150)\n \n");
-	else if (g_iOptimizeForPingMode[client] == 5)
-        Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Unplayable Ping (150-Unsupported)\n \n");
+    switch (g_iOptimizeForPingMode[client])
+	{
+		case 0:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: LAN (Not recommended if playing on a server)\n \n");
+		case 1:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Low Ping (1-15ms)\n \n");
+		case 2:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Medium Ping (15-50ms)\n \n");
+		case 3:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: High Ping (50-100ms)\n \n");
+		case 4:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Very High Ping (100-150ms)\n \n");
+		case 5:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Unplayable Ping (150ms+)\n \n");
+	}
     
     menu.AddItem("optimizeForPingMode", optimizeForPingMode);
 

@@ -550,7 +550,7 @@ public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
 			case 2: // Medium Ping (15-50)
 				iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
 			case 3: // High Ping (50-100)
-				iRefreshCameraDelay = 0.040 + g_fCameraDelayOffset[client];
+				iRefreshCameraDelay = 0.050 + g_fCameraDelayOffset[client];
 			case 4: // Very High Ping (100-150)
 				iRefreshCameraDelay = 0.120 + g_fCameraDelayOffset[client];
 			case 5: // Unplayable Ping (150+)
@@ -634,7 +634,7 @@ void RotateCameraAngle(int client, int mode)
 		case 2: // Medium Ping (15-50)
 			iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
 		case 3: // High Ping (50-100)
-			iRefreshCameraDelay = 0.065 + g_fCameraDelayOffset[client];
+			iRefreshCameraDelay = 0.075 + g_fCameraDelayOffset[client];
 		case 4: // Very High Ping (100-150)
 			iRefreshCameraDelay = 0.100 + g_fCameraDelayOffset[client];
 		case 5: // Unplayable Ping (150+)
@@ -849,14 +849,14 @@ public int CameraControlsMenuHandler(Menu menu, MenuAction action, int client, i
 				else if (StrEqual(info, "180"))
 					Command_RotateCamera180(client, 0);
 				else if (StrEqual(info, "diagonalCamera"))
-					Command_ToggleDiagonalCamera(client, 0);		
+					Command_ToggleDiagonalCamera(client, 0);
 
 				if (StrEqual(info, "mainMenu"))
 					ShowMainMenu(client);
 				else if (StrEqual(info, "cameraDelayOffsetMenu"))
 					ShowCameraDelayOffsetMenu(client);
 				else
-					ShowCameraControlsMenu(client);					
+					ShowCameraControlsMenu(client);
 			}
 		}
 		case MenuAction_End:

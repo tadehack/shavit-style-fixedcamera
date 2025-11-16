@@ -518,7 +518,7 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 			case 1: // Low Ping (1-15)
 				iRefreshCameraDelay = 0.010 + g_fCameraDelayOffset[client];
 			case 2: // Medium Ping (15-50)
-				iRefreshCameraDelay = 0.020 + g_fCameraDelayOffset[client];
+				iRefreshCameraDelay = 0.025 + g_fCameraDelayOffset[client];
 			case 3: // High Ping (50-100)
 				iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
 			case 4: // Very High Ping (100-150)
@@ -548,7 +548,7 @@ public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
 			case 1: // Low Ping (1-15)
 				iRefreshCameraDelay = 0.020 + g_fCameraDelayOffset[client];
 			case 2: // Medium Ping (15-50)
-				iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
+				iRefreshCameraDelay = 0.035 + g_fCameraDelayOffset[client];
 			case 3: // High Ping (50-100)
 				iRefreshCameraDelay = 0.065 + g_fCameraDelayOffset[client];
 			case 4: // Very High Ping (100-150)
@@ -632,7 +632,7 @@ void RotateCameraAngle(int client, int mode)
 		case 1: // Low Ping (1-15)
 			iRefreshCameraDelay = 0.015 + g_fCameraDelayOffset[client];
 		case 2: // Medium Ping (15-50)
-			iRefreshCameraDelay = 0.030 + g_fCameraDelayOffset[client];
+			iRefreshCameraDelay = 0.035 + g_fCameraDelayOffset[client];
 		case 3: // High Ping (50-100)
 			iRefreshCameraDelay = 0.075 + g_fCameraDelayOffset[client];
 		case 4: // Very High Ping (100-150)

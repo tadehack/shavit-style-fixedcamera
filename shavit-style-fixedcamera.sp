@@ -9,12 +9,15 @@
 
 // Global Variables -------------------------------------------------------
 
+Handle g_hTimerForceDisableCheats = null;
+ConVar sv_cheats;
+
 ConVar g_hMpForceCamera;
 ConVar g_cvSpecialString;
 
 char g_sSpecialString[stylestrings_t::sSpecialString];
 
-bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
+bool g_bFixedCameraEnabled[MAXPLAYERS + 1];
 bool g_bUseDiagonalCamera[MAXPLAYERS + 1];
 bool g_bUseHardcodedBinds[MAXPLAYERS + 1];
 bool g_bPressedHardcodedBind[MAXPLAYERS + 1];
@@ -33,11 +36,11 @@ float g_fStoredAngles[MAXPLAYERS + 1][3];
 float g_fCameraDelayOffset[MAXPLAYERS + 1];
 float g_fFixedAngle[3];
 
-float g_fLowPingRange = 1.0;
-float g_fMediumPingRange = 20.0;
-float g_fHighPingRange = 50.0;
-float g_fVeryHighPingRange = 100.0;
-float g_fUnplayablePingRange = 150.0;
+float g_fLowPingRangeStart = 1.0;
+float g_fMediumPingRangeStart = 20.0;
+float g_fHighPingRangeStart = 50.0;
+float g_fVeryHighPingRangeStart = 100.0;
+float g_fUnplayablePingRangeStart = 150.0;
 
 Cookie g_cOptimizeForPingModeCookie;
 Cookie g_cUseDiagonalCameraCookie;
@@ -52,7 +55,7 @@ public Plugin myinfo = {
 	name = "Shavit - Fixed Camera Style",
 	author = "devins, shinoum", 
 	description = "Fixed Camera Style for CS:S Bhop Timer",
-	version = "1.4.0",
+	version = "1.3.0",
 	url = "https://github.com/NSchrot/shavit-style-fixedcamera"
 }
 
@@ -66,6 +69,8 @@ public void OnPluginStart()
 	g_cvSpecialString.GetString(g_sSpecialString, sizeof(g_sSpecialString));
 
 	HookEvent("player_spawn", OnPlayerSpawn);
+
+    sv_cheats = FindConVar("sv_cheats");
 
 	// Commands ---------
 
@@ -154,11 +159,17 @@ public void OnClientPutInServer(int client)
 {
     OnClientCookiesCached(client);
 
-    if (IsInFCStyle(client))
+    if (IsValidClient(client) && !IsFakeClient(client))
 	{
-		g_iCameraAngle[client] = 0;
-		g_iLastButtons[client] = 0;
-		g_bThirdPersonEnabled[client] = true;
+		if (IsInFCStyle(client))
+		{
+			g_iCameraAngle[client] = 0;
+			g_iLastButtons[client] = 0;
+			g_bFixedCameraEnabled[client] = true;
+		}
+
+		// Retrieve player ping after 60 seconds so it has time to stabilize
+		CreateTimer(60.0, Timer_RetrievePlayerPing, GetClientSerial(client));
 	}
 }
 
@@ -244,13 +255,8 @@ public void OnClientCookiesCached(int client)
 
 public void OnClientDisconnect(int client)
 {
-	if (g_bThirdPersonEnabled[client])
-	{
-		//if (Timer_RetrievePlayerPing[client] != null)
-			//KillTimer(Timer_RetrievePlayerPing[client]);
-
+	if (g_bFixedCameraEnabled[client])
 		DisableThirdPerson(client);
-	}
 
 	g_bMovementBlocked[client] = false;
 }
@@ -258,7 +264,7 @@ public void OnClientDisconnect(int client)
 // This fixes a bug where the FOV would be reset when dropping or picking up a weapon
 public void OnClientPostThinkPost(int client)
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+	if (!IsValidClient(client) || !g_bFixedCameraEnabled[client])
 		return;
 		
 	if (GetEntProp(client, Prop_Send, "m_iFOV") != g_iFov[client])
@@ -268,18 +274,19 @@ public void OnClientPostThinkPost(int client)
 public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client) && !IsFakeClient(client))
 	{
-		CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client));
-		
-		// Retrieve player ping after 10 seconds so it has time to stabilize
-		CreateTimer(10.0, Timer_RetrievePlayerPing, GetClientSerial(client));
+		if (IsInFCStyle(client))
+		{
+			CreateTimer(0.1, Timer_ReEnableThirdPerson, GetClientSerial(client));
+			//g_hTimerForceDisableCheats = CreateTimer(1.0, Timer_ForceDisableCheats, GetClientSerial(client), TIMER_REPEAT);
+		}
 	}
 }
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3])
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+	if (!IsValidClient(client) || !g_bFixedCameraEnabled[client])
 		return Plugin_Continue;
 
 	if (g_bUseHardcodedBinds[client])
@@ -342,12 +349,12 @@ public void Shavit_OnStyleChanged(int client, int oldstyle, int newstyle, int tr
 	Shavit_GetStyleStrings(newstyle, sSpecialString, sStyleSpecial, sizeof(sStyleSpecial));
     bool bIsInFCStyle = (StrContains(sStyleSpecial, g_sSpecialString) != -1);
 
-    if (bIsInFCStyle && !g_bThirdPersonEnabled[client])
+    if (bIsInFCStyle && !g_bFixedCameraEnabled[client])
     {
         EnableThirdPerson(client);
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
     }
-    else if (!bIsInFCStyle && g_bThirdPersonEnabled[client])
+    else if (!bIsInFCStyle && g_bFixedCameraEnabled[client])
     {
         DisableThirdPerson(client);
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", 0);
@@ -360,6 +367,8 @@ public void ConVar_OnSpecialStringChanged(ConVar convar, const char[] oldValue, 
 }
 
 // Commands ---------------------------------------------------------------------------------
+
+// Camera Rotation -----
 
 public Action Command_RotateCameraLeft(int client, int args)
 {
@@ -397,6 +406,8 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
 	return Plugin_Handled;
 }
+
+// Other Commands -----
 
 public Action Command_ToggleHardCodedBinds(int client, int args)
 {
@@ -461,6 +472,8 @@ public Action Command_ApplyFOV(int client, int args)
 	return Plugin_Handled;
 }
 
+// Menu Commands -----
+
 public Action Command_MainMenu(int client, int args)
 {
 	if (!IsValidClient(client) || !IsInFCStyle(client))
@@ -503,31 +516,44 @@ public Action Command_Help(int client, int args)
 
 // Timers ----------------------------------------------------------------------------------
 
+public Action Timer_ForceDisableCheats(Handle timer, int serial)
+{
+    int client = GetClientFromSerial(serial);
+	if (IsValidClient(client))
+	{
+		ClientCommand(client, "firstperson");
+		ClientCommand(client, "cam_idealdist 0");
+		sv_cheats.ReplicateToClient(client, "0");
+	}
+
+    return Plugin_Continue;
+}
+
 public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client))
 	{
 		// Get Player Ping for Camera Delay Offset Preset
 		int iPlayerPing = GetEntProp(GetPlayerResourceEntity(), Prop_Send, "m_iPing", _, client);
 		
 		if (iPlayerPing < 1)
 		{
-			Shavit_PrintToChatAll("Could not detect ping for player %N", client);
+			Shavit_PrintToChatAll("Could not detect ping for player \x07A082FF%N", client);
 			g_iOptimizeForPingMode[client] = 0;
 		}
-		else if (iPlayerPing >= g_fLowPingRange && iPlayerPing < g_fMediumPingRange)
+		else if (iPlayerPing >= g_fLowPingRangeStart && iPlayerPing < g_fMediumPingRangeStart)
 			g_iOptimizeForPingMode[client] = 1;
-		else if (iPlayerPing >= g_fMediumPingRange && iPlayerPing < g_fHighPingRange)
+		else if (iPlayerPing >= g_fMediumPingRangeStart && iPlayerPing < g_fHighPingRangeStart)
 			g_iOptimizeForPingMode[client] = 2;
-		else if (iPlayerPing >= g_fHighPingRange && iPlayerPing < g_fVeryHighPingRange)
+		else if (iPlayerPing >= g_fHighPingRangeStart && iPlayerPing < g_fVeryHighPingRangeStart)
 			g_iOptimizeForPingMode[client] = 3;
-		else if (iPlayerPing >= g_fVeryHighPingRange && iPlayerPing < g_fUnplayablePingRange)
+		else if (iPlayerPing >= g_fVeryHighPingRangeStart && iPlayerPing < g_fUnplayablePingRangeStart)
 			g_iOptimizeForPingMode[client] = 4;
-		else if (iPlayerPing > g_fUnplayablePingRange)
+		else if (iPlayerPing > g_fUnplayablePingRangeStart)
 			g_iOptimizeForPingMode[client] = 5;
 
-		Shavit_PrintToChatAll("%N | Ping: %dms | Preset: %d", client, iPlayerPing, g_iOptimizeForPingMode[client]);
+		Shavit_PrintToChatAll("\x078efeffFixed Camera: \x07A082FF%N \x07FFFFFF| Ping: \x07A082FF%dms \x07FFFFFF| Preset: \x07A082FF%d", client, iPlayerPing, g_iOptimizeForPingMode[client]);
 	}
 
 	return Plugin_Stop;
@@ -536,7 +562,7 @@ public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
 		SetViewAngles(client);
 		CreateTimer(0.1, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
@@ -550,7 +576,7 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
 		SendConVarValue(client, g_hMpForceCamera, "1");
 		SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
@@ -583,7 +609,7 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
 		RestorePlayerViewAngles(client);
 
@@ -613,7 +639,7 @@ public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
 public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
 		g_bMovementBlocked[client] = false;
 		g_bPressedHardcodedBind[client] = false;
@@ -626,6 +652,9 @@ public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
 
 void RotateCameraAngle(int client, int mode)
 {
+	if (!IsPlayerAlive(client))
+		return;
+	
 	StorePlayerViewAngles(client);
     
     if (mode == 0) // Rotate Left
@@ -729,11 +758,13 @@ public void EnableThirdPerson(int client)
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;
 		
-	g_bThirdPersonEnabled[client] = true;
+	g_bFixedCameraEnabled[client] = true;
 	g_iCameraAngle[client] = 0;
 
 	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
-	CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.1, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+	g_hTimerForceDisableCheats = CreateTimer(1.0, Timer_ForceDisableCheats, GetClientSerial(client), TIMER_REPEAT);
 	
 	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffPress \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
 	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffType \x07A082FF/fcmenu \x07fffffffor additional commands and help");
@@ -744,7 +775,7 @@ public void DisableThirdPerson(int client)
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;
 		
-	g_bThirdPersonEnabled[client] = false;
+	g_bFixedCameraEnabled[client] = false;
 	
 	SDKUnhook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
 	
@@ -754,6 +785,12 @@ public void DisableThirdPerson(int client)
 	
 	float resetAngles[3] = {0.0, 0.0, 0.0};
 	TeleportEntity(client, NULL_VECTOR, resetAngles, NULL_VECTOR);
+
+	if (g_hTimerForceDisableCheats != null)
+	{
+		KillTimer(g_hTimerForceDisableCheats);
+		g_hTimerForceDisableCheats = null;
+	}
 }
 
 public bool IsInFCStyle(int client)
@@ -881,7 +918,7 @@ public int CameraControlsMenuHandler(Menu menu, MenuAction action, int client, i
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (g_bThirdPersonEnabled[client])
+			if (g_bFixedCameraEnabled[client])
 			{
 				if (StrEqual(info, "left"))
 					Command_RotateCameraLeft(client, 0);
@@ -926,15 +963,15 @@ void ShowCameraDelayOffsetMenu(int client)
 		case 0:
 			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: LAN (Not recommended if playing on a server)\n \n");
 		case 1:
-			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Low Ping (%.0f-%.0fms)\n \n", g_fLowPingRange + 4, g_fMediumPingRange);
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Low Ping (%.0f-%.0fms)\n \n", g_fLowPingRangeStart, g_fMediumPingRangeStart);
 		case 2:
-			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Medium Ping (%.0f-%.0fms)\n \n", g_fMediumPingRange, g_fHighPingRange);
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Medium Ping (%.0f-%.0fms)\n \n", g_fMediumPingRangeStart, g_fHighPingRangeStart);
 		case 3:
-			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: High Ping (%.0f-%.0fms)\n \n", g_fHighPingRange, g_fVeryHighPingRange);
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: High Ping (%.0f-%.0fms)\n \n", g_fHighPingRangeStart, g_fVeryHighPingRangeStart);
 		case 4:
-			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Very High Ping (%.0f-%.0fms)\n \n", g_fVeryHighPingRange, g_fUnplayablePingRange);
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Very High Ping (%.0f-%.0fms)\n \n", g_fVeryHighPingRangeStart, g_fUnplayablePingRangeStart);
 		case 5:
-			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Unplayable Ping (%.0fms+)\n \n", g_fUnplayablePingRange);
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Unplayable Ping (%.0fms+)\n \n", g_fUnplayablePingRangeStart);
 	}
     
     menu.AddItem("optimizeForPingMode", optimizeForPingMode);
@@ -954,7 +991,7 @@ public int CameraDelayOffsetMenuHandler(Menu menu, MenuAction action, int client
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (g_bThirdPersonEnabled[client])
+			if (g_bFixedCameraEnabled[client])
 			{
 				if (StrEqual(info, "increase"))
 				{
@@ -1025,7 +1062,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (g_bThirdPersonEnabled[client])
+			if (g_bFixedCameraEnabled[client])
 			{
 				if (StrEqual(info, "increase"))
 				{

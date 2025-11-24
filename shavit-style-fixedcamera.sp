@@ -24,6 +24,7 @@ bool g_bPressedHardcodedBind[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 bool g_bMovementBlocked[MAXPLAYERS + 1];
 bool g_bSeePlayerPingDetection[MAXPLAYERS + 1];
+bool g_bHasDetectedPlayerPing[MAXPLAYERS + 1];
 
 int g_iOptimizeForPingMode[MAXPLAYERS+1];
 int g_iCameraAngle[MAXPLAYERS + 1];
@@ -44,6 +45,7 @@ float g_fVeryHighPingRangeStart = 100.0;
 float g_fUnplayablePingRangeStart = 150.0;
 
 Cookie g_cSeePlayerPingDetectionCookie;
+Cookie g_cHasDetectedPlayerPingCookie;
 Cookie g_cOptimizeForPingModeCookie;
 Cookie g_cUseDiagonalCameraCookie;
 Cookie g_cCameraDelayOffsetCookie;
@@ -143,6 +145,7 @@ public void OnPluginStart()
 	g_cCameraDelayOffsetCookie = new Cookie("CameraDelayOffset", "Camera Delay Offset state", CookieAccess_Protected);
 	g_cUseHardCodedBindsCookie = new Cookie("Toggle_HardCodedKeys", "Toggle Hardcoded Binds state", CookieAccess_Protected);
 	g_cOptimizeForPingModeCookie = new Cookie("OptimizeForPingMode", "Optimize for Ping Mode state", CookieAccess_Protected);
+	g_cHasDetectedPlayerPingCookie = new Cookie("HasDetectedPlayerPing", "Check if player ping has already been detected", CookieAccess_Protected);
 	g_cSeePlayerPingDetectionCookie = new Cookie("SeePlayerPingMode", "See Player Ping Mode state", CookieAccess_Protected);
 
 	for (int client = 1; client <= MaxClients; client++)
@@ -175,7 +178,8 @@ public void OnClientPutInServer(int client)
 		}
 
 		// Retrieve player ping after 60 seconds so it has time to stabilize
-		CreateTimer(60.0, Timer_RetrievePlayerPing, GetClientSerial(client));
+		if(!g_bHasDetectedPlayerPing[client])
+			CreateTimer(60.0, Timer_RetrievePlayerPing, GetClientSerial(client));
 	}
 }
 
@@ -232,6 +236,18 @@ public void OnClientCookiesCached(int client)
 	else
 	{
 		g_bSeePlayerPingDetection[client] = StringToInt(buffer) == 1;
+	}
+
+	// Load Has Detected Player Ping cookie
+	g_cHasDetectedPlayerPingCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_bHasDetectedPlayerPing[client] = false;
+		g_cHasDetectedPlayerPingCookie.Set(client, "0");
+	}
+	else
+	{
+		g_bHasDetectedPlayerPing[client] = StringToInt(buffer) == 1;
 	}
 	
 	// Load Use Hardcoded binds cookie
@@ -568,6 +584,8 @@ public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 			
 			if (g_bSeePlayerPingDetection[client])
 				Shavit_PrintToChat(client, "Could not detect ping for player \x07A082FF%N", client);
+
+			return Plugin_Stop;
 		}
 		else if (iPlayerPing >= g_fLowPingRangeStart && iPlayerPing < g_fMediumPingRangeStart)
 			g_iOptimizeForPingMode[client] = 1;
@@ -577,13 +595,19 @@ public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 			g_iOptimizeForPingMode[client] = 3;
 		else if (iPlayerPing >= g_fVeryHighPingRangeStart && iPlayerPing < g_fUnplayablePingRangeStart)
 			g_iOptimizeForPingMode[client] = 4;
-		else if (iPlayerPing > g_fUnplayablePingRangeStart)
+		else if (iPlayerPing >= g_fUnplayablePingRangeStart)
 			g_iOptimizeForPingMode[client] = 5;
 
 		SaveSettingToCookie(g_cOptimizeForPingModeCookie, client, g_iOptimizeForPingMode[client]);
 
+		g_bHasDetectedPlayerPing[client] = true;
+		SaveSettingToCookie(g_cHasDetectedPlayerPingCookie, client, g_bHasDetectedPlayerPing[client]);
+
 		if (g_bSeePlayerPingDetection[client])
 			Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07A082FF%N \x07FFFFFF| Ping: \x07A082FF%dms \x07FFFFFF| Preset: \x07A082FF%d", client, iPlayerPing, g_iOptimizeForPingMode[client]);
+
+		if(g_iOptimizeForPingMode[client] > 2)
+			Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07FFFFFFWarning, your ping is too high (\x07A082FF%dms\x07FFFFFF), which will cause jump and camera rotation lag", iPlayerPing);
 	}
 
 	return Plugin_Stop;

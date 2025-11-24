@@ -23,6 +23,7 @@ bool g_bUseHardcodedBinds[MAXPLAYERS + 1];
 bool g_bPressedHardcodedBind[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 bool g_bMovementBlocked[MAXPLAYERS + 1];
+bool g_bSeePlayerPingDetection[MAXPLAYERS + 1];
 
 int g_iOptimizeForPingMode[MAXPLAYERS+1];
 int g_iCameraAngle[MAXPLAYERS + 1];
@@ -42,6 +43,7 @@ float g_fHighPingRangeStart = 50.0;
 float g_fVeryHighPingRangeStart = 100.0;
 float g_fUnplayablePingRangeStart = 150.0;
 
+Cookie g_cSeePlayerPingDetectionCookie;
 Cookie g_cOptimizeForPingModeCookie;
 Cookie g_cUseDiagonalCameraCookie;
 Cookie g_cCameraDelayOffsetCookie;
@@ -130,14 +132,18 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fcbinds", Command_Help, "Open Fixed Camera Commands & Binds menu");
 	RegConsoleCmd("sm_fchelp", Command_Help, "Open Fixed Camera Commands & Binds menu");
 
-	// Initialize Cookies ---------
+	// Other
+	RegConsoleCmd("sm_fcseeplayerping", Command_SeePlayerPingDetection, "Shows player ping detection in chat");
+	RegConsoleCmd("sm_fcping", Command_SeePlayerPingDetection, "Shows player ping detection in chat");
 
-	g_cOptimizeForPingModeCookie = new Cookie("OptimizeForPingMode", "Optimize for Ping Mode state", CookieAccess_Protected);
+	// Initialize Cookies ---------
+	g_cNvgCookie = new Cookie("nvg", "nvg state", CookieAccess_Protected);
+	g_cFovCookie = new Cookie("fov", "fov state", CookieAccess_Protected);
 	g_cUseDiagonalCameraCookie = new Cookie("Toggle_Diagonal", "Diagonal Camera state", CookieAccess_Protected);
 	g_cCameraDelayOffsetCookie = new Cookie("CameraDelayOffset", "Camera Delay Offset state", CookieAccess_Protected);
 	g_cUseHardCodedBindsCookie = new Cookie("Toggle_HardCodedKeys", "Toggle Hardcoded Binds state", CookieAccess_Protected);
-	g_cNvgCookie = new Cookie("nvg", "nvg state", CookieAccess_Protected);
-	g_cFovCookie = new Cookie("fov", "fov state", CookieAccess_Protected);
+	g_cOptimizeForPingModeCookie = new Cookie("OptimizeForPingMode", "Optimize for Ping Mode state", CookieAccess_Protected);
+	g_cSeePlayerPingDetectionCookie = new Cookie("SeePlayerPingMode", "See Player Ping Mode state", CookieAccess_Protected);
 
 	for (int client = 1; client <= MaxClients; client++)
 	{
@@ -215,6 +221,18 @@ public void OnClientCookiesCached(int client)
 	{
 		g_iOptimizeForPingMode[client] = StringToInt(buffer);
 	}
+
+	// Load See Player Ping Detection Mode cookie
+	g_cSeePlayerPingDetectionCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_bSeePlayerPingDetection[client] = false;
+		g_cSeePlayerPingDetectionCookie.Set(client, "0");
+	}
+	else
+	{
+		g_bSeePlayerPingDetection[client] = StringToInt(buffer) == 1;
+	}
 	
 	// Load Use Hardcoded binds cookie
 	g_cUseHardCodedBindsCookie.Get(client, buffer, sizeof(buffer));
@@ -277,10 +295,7 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	if (IsValidClient(client) && !IsFakeClient(client))
 	{
 		if (IsInFCStyle(client))
-		{
 			CreateTimer(0.1, Timer_ReEnableThirdPerson, GetClientSerial(client));
-			//g_hTimerForceDisableCheats = CreateTimer(1.0, Timer_ForceDisableCheats, GetClientSerial(client), TIMER_REPEAT);
-		}
 	}
 }
 
@@ -472,6 +487,19 @@ public Action Command_ApplyFOV(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action Command_SeePlayerPingDetection(int client, int args)
+{
+    if (!IsValidClient(client) || !IsInFCStyle(client))
+        return Plugin_Handled;
+
+	g_bSeePlayerPingDetection[client] = !g_bSeePlayerPingDetection[client];
+	SaveSettingToCookie(g_cSeePlayerPingDetectionCookie, client, g_bSeePlayerPingDetection[client]);
+
+	Shavit_PrintToChat(client, "See Player Ping: %s", g_bSeePlayerPingDetection[client] ? "\x078efeffOn" : "\x07A082FFOff");
+
+    return Plugin_Handled;
+}
+
 // Menu Commands -----
 
 public Action Command_MainMenu(int client, int args)
@@ -516,15 +544,12 @@ public Action Command_Help(int client, int args)
 
 // Timers ----------------------------------------------------------------------------------
 
+// This is done so that if using client-side-cheats.smx, commands like 'thirdperson' on console is not abused on this style
 public Action Timer_ForceDisableCheats(Handle timer, int serial)
 {
     int client = GetClientFromSerial(serial);
 	if (IsValidClient(client))
-	{
-		ClientCommand(client, "firstperson");
-		ClientCommand(client, "cam_idealdist 0");
 		sv_cheats.ReplicateToClient(client, "0");
-	}
 
     return Plugin_Continue;
 }
@@ -539,8 +564,10 @@ public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 		
 		if (iPlayerPing < 1)
 		{
-			Shavit_PrintToChatAll("Could not detect ping for player \x07A082FF%N", client);
 			g_iOptimizeForPingMode[client] = 0;
+			
+			if (g_bSeePlayerPingDetection[client])
+				Shavit_PrintToChat(client, "Could not detect ping for player \x07A082FF%N", client);
 		}
 		else if (iPlayerPing >= g_fLowPingRangeStart && iPlayerPing < g_fMediumPingRangeStart)
 			g_iOptimizeForPingMode[client] = 1;
@@ -553,7 +580,10 @@ public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 		else if (iPlayerPing > g_fUnplayablePingRangeStart)
 			g_iOptimizeForPingMode[client] = 5;
 
-		Shavit_PrintToChatAll("\x078efeffFixed Camera: \x07A082FF%N \x07FFFFFF| Ping: \x07A082FF%dms \x07FFFFFF| Preset: \x07A082FF%d", client, iPlayerPing, g_iOptimizeForPingMode[client]);
+		SaveSettingToCookie(g_cOptimizeForPingModeCookie, client, g_iOptimizeForPingMode[client]);
+
+		if (g_bSeePlayerPingDetection[client])
+			Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07A082FF%N \x07FFFFFF| Ping: \x07A082FF%dms \x07FFFFFF| Preset: \x07A082FF%d", client, iPlayerPing, g_iOptimizeForPingMode[client]);
 	}
 
 	return Plugin_Stop;
@@ -587,7 +617,7 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 		switch (g_iOptimizeForPingMode[client])
 		{
 			case 0: // LAN
-				iRefreshDelay = 0.005 + g_fCameraDelayOffset[client]; // we don't even need delay for LAN
+				iRefreshDelay = 0.005 + g_fCameraDelayOffset[client];
 			case 1: // Low Ping
 				iRefreshDelay = 0.010 + g_fCameraDelayOffset[client];
 			case 2: // Medium Ping
@@ -703,15 +733,15 @@ void RotateCameraAngle(int client, int mode)
 	{
 		case 0: // LAN
 			iRefreshDelay = 0.010 + g_fCameraDelayOffset[client];
-		case 1: // Low Ping (1-20)
+		case 1: // Low Ping
 			iRefreshDelay = 0.015 + g_fCameraDelayOffset[client];
-		case 2: // Medium Ping (20-50)
+		case 2: // Medium Ping
 			iRefreshDelay = 0.035 + g_fCameraDelayOffset[client];
-		case 3: // High Ping (50-100)
+		case 3: // High Ping
 			iRefreshDelay = 0.075 + g_fCameraDelayOffset[client];
-		case 4: // Very High Ping (100-150)
+		case 4: // Very High Ping
 			iRefreshDelay = 0.100 + g_fCameraDelayOffset[client];
-		case 5: // Unplayable Ping (150+)
+		case 5: // Unplayable Ping
 			iRefreshDelay = 0.200 + g_fCameraDelayOffset[client];
 	}
 

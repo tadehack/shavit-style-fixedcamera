@@ -10,8 +10,8 @@
 // Global Variables -------------------------------------------------------
 
 Handle g_hTimerForceDisableCheats = null;
-ConVar sv_cheats;
 
+ConVar sv_cheats;
 ConVar g_hMpForceCamera;
 ConVar g_cvSpecialString;
 
@@ -176,10 +176,6 @@ public void OnClientPutInServer(int client)
 			g_iLastButtons[client] = 0;
 			g_bFixedCameraEnabled[client] = true;
 		}
-
-		// Retrieve player ping after 60 seconds so it has time to stabilize
-		if(!g_bHasDetectedPlayerPing[client])
-			CreateTimer(60.0, Timer_RetrievePlayerPing, GetClientSerial(client));
 	}
 }
 
@@ -290,7 +286,7 @@ public void OnClientCookiesCached(int client)
 public void OnClientDisconnect(int client)
 {
 	if (g_bFixedCameraEnabled[client])
-		DisableThirdPerson(client);
+		DisableFixedCamera(client);
 
 	g_bMovementBlocked[client] = false;
 }
@@ -311,7 +307,7 @@ public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	if (IsValidClient(client) && !IsFakeClient(client))
 	{
 		if (IsInFCStyle(client))
-			CreateTimer(0.1, Timer_ReEnableThirdPerson, GetClientSerial(client));
+			CreateTimer(0.1, Timer_ReEnableFixedCamera, GetClientSerial(client));
 	}
 }
 
@@ -382,12 +378,16 @@ public void Shavit_OnStyleChanged(int client, int oldstyle, int newstyle, int tr
 
     if (bIsInFCStyle && !g_bFixedCameraEnabled[client])
     {
-        EnableThirdPerson(client);
+        EnableFixedCamera(client);
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
+
+		// Retrieve player ping after 60 seconds so it has time to stabilize
+		if(!g_bHasDetectedPlayerPing[client])
+			CreateTimer(60.0, Timer_RetrievePlayerPing, GetClientSerial(client));
     }
     else if (!bIsInFCStyle && g_bFixedCameraEnabled[client])
     {
-        DisableThirdPerson(client);
+        DisableFixedCamera(client);
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", 0);
     }
 }
@@ -613,13 +613,13 @@ public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 	return Plugin_Stop;
 }
 
-public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
+public Action Timer_ReEnableFixedCamera(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
 	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
 		SetViewAngles(client);
-		CreateTimer(0.1, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.2, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
 	}
@@ -769,8 +769,8 @@ void RotateCameraAngle(int client, int mode)
 			iRefreshDelay = 0.200 + g_fCameraDelayOffset[client];
 	}
 
-	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
-	// so we need a slightly higher timer for manual binds
+	// This is needed because for some reason when not using the hardcoded Shift/E binds,
+	// it requires an additional delay to prevent code skipping (wtf)
 	if (!g_bPressedHardcodedBind[client])
 		iRefreshDelay += 0.010;
 
@@ -807,7 +807,7 @@ public void RestorePlayerViewAngles(int client)
 	TeleportEntity(client, NULL_VECTOR, g_fStoredAngles[client], NULL_VECTOR);
 }
 
-public void EnableThirdPerson(int client)
+public void EnableFixedCamera(int client)
 {
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;
@@ -816,7 +816,7 @@ public void EnableThirdPerson(int client)
 	g_iCameraAngle[client] = 0;
 
 	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
-	CreateTimer(0.1, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.1, Timer_ReEnableFixedCamera, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 	g_hTimerForceDisableCheats = CreateTimer(1.0, Timer_ForceDisableCheats, GetClientSerial(client), TIMER_REPEAT);
 	
@@ -824,7 +824,7 @@ public void EnableThirdPerson(int client)
 	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffType \x07A082FF/fcmenu \x07fffffffor additional commands and help");
 }
 
-public void DisableThirdPerson(int client)
+public void DisableFixedCamera(int client)
 {
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;

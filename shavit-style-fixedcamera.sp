@@ -12,7 +12,7 @@
 Handle g_hTimerForceDisableCheats = null;
 
 ConVar sv_cheats;
-ConVar g_hMpForceCamera;
+ConVar g_cvMpForceCamera;
 ConVar g_cvSpecialString;
 
 char g_sSpecialString[stylestrings_t::sSpecialString];
@@ -67,7 +67,7 @@ public Plugin myinfo = {
 
 public void OnPluginStart()
 {
-	g_hMpForceCamera = FindConVar("mp_forcecamera");
+	g_cvMpForceCamera = FindConVar("mp_forcecamera");
 	g_cvSpecialString = CreateConVar("ss_fixedcamera_specialstring", "fixedcamera", "Special string for Fixed Camera style detection");
 	g_cvSpecialString.AddChangeHook(ConVar_OnSpecialStringChanged);
 	g_cvSpecialString.GetString(g_sSpecialString, sizeof(g_sSpecialString));
@@ -632,7 +632,7 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 	int client = GetClientFromSerial(serial);
 	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
-		SendConVarValue(client, g_hMpForceCamera, "1");
+		SendConVarValue(client, g_cvMpForceCamera, "1");
 		SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
 		SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
@@ -747,7 +747,7 @@ void RotateCameraAngle(int client, int mode)
 		g_bPressedHardcodedBind[client] = false;
 	}
 	
-	SendConVarValue(client, g_hMpForceCamera, "0");
+	SendConVarValue(client, g_cvMpForceCamera, "0");
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);

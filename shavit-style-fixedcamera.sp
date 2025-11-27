@@ -9,27 +9,46 @@
 
 // Global Variables -------------------------------------------------------
 
-ConVar g_hMpForceCamera;
+Handle g_hTimerForceDisableCheats = null;
+
+ConVar sv_cheats;
+ConVar g_cvMpForceCamera;
 ConVar g_cvSpecialString;
 
 char g_sSpecialString[stylestrings_t::sSpecialString];
 
-bool g_bThirdPersonEnabled[MAXPLAYERS + 1];
+bool g_bFixedCameraEnabled[MAXPLAYERS + 1];
 bool g_bUseDiagonalCamera[MAXPLAYERS + 1];
 bool g_bUseHardcodedBinds[MAXPLAYERS + 1];
 bool g_bPressedHardcodedBind[MAXPLAYERS + 1];
 bool g_bNightVisionIsEnabled[MAXPLAYERS + 1];
 bool g_bMovementBlocked[MAXPLAYERS + 1];
+bool g_bSeePlayerPingDetection[MAXPLAYERS + 1];
+bool g_bHasDetectedPlayerPing[MAXPLAYERS + 1];
 
+int g_iOptimizeForPingMode[MAXPLAYERS+1];
 int g_iCameraAngle[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
+
 int g_iFov[MAXPLAYERS + 1];
 int g_iMinFov = 80;
 int g_iMaxFov = 125;
 
 float g_fStoredAngles[MAXPLAYERS + 1][3];
+float g_fCameraDelayOffset[MAXPLAYERS + 1];
+float g_fFixedAngle[3];
 
+float g_fLowPingRangeStart = 1.0;
+float g_fMediumPingRangeStart = 20.0;
+float g_fHighPingRangeStart = 50.0;
+float g_fVeryHighPingRangeStart = 100.0;
+float g_fUnplayablePingRangeStart = 150.0;
+
+Cookie g_cSeePlayerPingDetectionCookie;
+Cookie g_cHasDetectedPlayerPingCookie;
+Cookie g_cOptimizeForPingModeCookie;
 Cookie g_cUseDiagonalCameraCookie;
+Cookie g_cCameraDelayOffsetCookie;
 Cookie g_cUseHardCodedBindsCookie;
 Cookie g_cNvgCookie;
 Cookie g_cFovCookie;
@@ -40,7 +59,7 @@ public Plugin myinfo = {
 	name = "Shavit - Fixed Camera Style",
 	author = "devins, shinoum", 
 	description = "Fixed Camera Style for CS:S Bhop Timer",
-	version = "1.2.0",
+	version = "1.3.0",
 	url = "https://github.com/NSchrot/shavit-style-fixedcamera"
 }
 
@@ -48,12 +67,14 @@ public Plugin myinfo = {
 
 public void OnPluginStart()
 {
-	g_hMpForceCamera = FindConVar("mp_forcecamera");
+	g_cvMpForceCamera = FindConVar("mp_forcecamera");
 	g_cvSpecialString = CreateConVar("ss_fixedcamera_specialstring", "fixedcamera", "Special string for Fixed Camera style detection");
 	g_cvSpecialString.AddChangeHook(ConVar_OnSpecialStringChanged);
 	g_cvSpecialString.GetString(g_sSpecialString, sizeof(g_sSpecialString));
 
 	HookEvent("player_spawn", OnPlayerSpawn);
+
+    sv_cheats = FindConVar("sv_cheats");
 
 	// Commands ---------
 
@@ -101,17 +122,31 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_fccameracontrols", Command_CameraControlsMenu, "Open Camera Controls menu");
 	RegConsoleCmd("sm_fccamera", Command_CameraControlsMenu, "Open Camera Controls menu");
 
+	// Camera Delay Offset Menu
+	RegConsoleCmd("sm_fccameradelayoffset", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fccameraoffset", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fccameradelay", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fcoffset", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+	RegConsoleCmd("sm_fcdelay", Command_CameraDelayOffsetMenu, "Open Camera Delay Offset menu");
+
 	// Commands & Binds
 	RegConsoleCmd("sm_fccommands", Command_Help, "Open Fixed Camera Commands & Binds menu");
 	RegConsoleCmd("sm_fcbinds", Command_Help, "Open Fixed Camera Commands & Binds menu");
 	RegConsoleCmd("sm_fchelp", Command_Help, "Open Fixed Camera Commands & Binds menu");
 
-	// Cookies ---------
+	// Other
+	RegConsoleCmd("sm_fcseeplayerping", Command_SeePlayerPingDetection, "Shows player ping detection in chat");
+	RegConsoleCmd("sm_fcping", Command_SeePlayerPingDetection, "Shows player ping detection in chat");
 
-	g_cUseDiagonalCameraCookie = new Cookie("Toggle_Diagonal", "Diagonal Camera state", CookieAccess_Protected);
-	g_cUseHardCodedBindsCookie = new Cookie("Toggle_HardCodedKeys", "Toggle Hardcoded binds state", CookieAccess_Protected);
+	// Initialize Cookies ---------
 	g_cNvgCookie = new Cookie("nvg", "nvg state", CookieAccess_Protected);
 	g_cFovCookie = new Cookie("fov", "fov state", CookieAccess_Protected);
+	g_cUseDiagonalCameraCookie = new Cookie("Toggle_Diagonal", "Diagonal Camera state", CookieAccess_Protected);
+	g_cCameraDelayOffsetCookie = new Cookie("CameraDelayOffset", "Camera Delay Offset state", CookieAccess_Protected);
+	g_cUseHardCodedBindsCookie = new Cookie("Toggle_HardCodedKeys", "Toggle Hardcoded Binds state", CookieAccess_Protected);
+	g_cOptimizeForPingModeCookie = new Cookie("OptimizeForPingMode", "Optimize for Ping Mode state", CookieAccess_Protected);
+	g_cHasDetectedPlayerPingCookie = new Cookie("HasDetectedPlayerPing", "Check if player ping has already been detected", CookieAccess_Protected);
+	g_cSeePlayerPingDetectionCookie = new Cookie("SeePlayerPingMode", "See Player Ping Mode state", CookieAccess_Protected);
 
 	for (int client = 1; client <= MaxClients; client++)
 	{
@@ -133,11 +168,14 @@ public void OnClientPutInServer(int client)
 {
     OnClientCookiesCached(client);
 
-    if (IsInFCStyle(client))
+    if (IsValidClient(client) && !IsFakeClient(client))
 	{
-		g_iCameraAngle[client] = 0;
-		g_iLastButtons[client] = 0;
-		g_bThirdPersonEnabled[client] = true;
+		if (IsInFCStyle(client))
+		{
+			g_iCameraAngle[client] = 0;
+			g_iLastButtons[client] = 0;
+			g_bFixedCameraEnabled[client] = true;
+		}
 	}
 }
 
@@ -158,6 +196,54 @@ public void OnClientCookiesCached(int client)
 	else
 	{
 	    g_bUseDiagonalCamera[client] = (StringToInt(buffer) == 1);
+	}
+
+	// Load Camera Delay Offset cookie
+	g_cCameraDelayOffsetCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_fCameraDelayOffset[client] = 0.0;
+		g_cCameraDelayOffsetCookie.Set(client, "0.0");
+	}
+	else
+	{
+		g_fCameraDelayOffset[client] = StringToFloat(buffer);
+	}
+
+	// Load Optimize for Ping Mode cookie
+	g_cOptimizeForPingModeCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_iOptimizeForPingMode[client] = 1;
+		g_cOptimizeForPingModeCookie.Set(client, "1");
+	}
+	else
+	{
+		g_iOptimizeForPingMode[client] = StringToInt(buffer);
+	}
+
+	// Load See Player Ping Detection Mode cookie
+	g_cSeePlayerPingDetectionCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_bSeePlayerPingDetection[client] = false;
+		g_cSeePlayerPingDetectionCookie.Set(client, "0");
+	}
+	else
+	{
+		g_bSeePlayerPingDetection[client] = StringToInt(buffer) == 1;
+	}
+
+	// Load Has Detected Player Ping cookie
+	g_cHasDetectedPlayerPingCookie.Get(client, buffer, sizeof(buffer));
+	if (buffer[0] == '\0')
+	{
+		g_bHasDetectedPlayerPing[client] = false;
+		g_cHasDetectedPlayerPingCookie.Set(client, "0");
+	}
+	else
+	{
+		g_bHasDetectedPlayerPing[client] = StringToInt(buffer) == 1;
 	}
 	
 	// Load Use Hardcoded binds cookie
@@ -199,8 +285,8 @@ public void OnClientCookiesCached(int client)
 
 public void OnClientDisconnect(int client)
 {
-	if (g_bThirdPersonEnabled[client])
-		DisableThirdPerson(client);
+	if (g_bFixedCameraEnabled[client])
+		DisableFixedCamera(client);
 
 	g_bMovementBlocked[client] = false;
 }
@@ -208,7 +294,7 @@ public void OnClientDisconnect(int client)
 // This fixes a bug where the FOV would be reset when dropping or picking up a weapon
 public void OnClientPostThinkPost(int client)
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+	if (!IsValidClient(client) || !g_bFixedCameraEnabled[client])
 		return;
 		
 	if (GetEntProp(client, Prop_Send, "m_iFOV") != g_iFov[client])
@@ -218,13 +304,16 @@ public void OnClientPostThinkPost(int client)
 public void OnPlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
-		CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client));
+	if (IsValidClient(client) && !IsFakeClient(client))
+	{
+		if (IsInFCStyle(client))
+			CreateTimer(0.1, Timer_ReEnableFixedCamera, GetClientSerial(client));
+	}
 }
 
 public Action OnPlayerRunCmd(int client, int& buttons, int& impulse, float vel[3], float angles[3])
 {
-	if (!IsValidClient(client) || !g_bThirdPersonEnabled[client])
+	if (!IsValidClient(client) || !g_bFixedCameraEnabled[client])
 		return Plugin_Continue;
 
 	if (g_bUseHardcodedBinds[client])
@@ -287,14 +376,18 @@ public void Shavit_OnStyleChanged(int client, int oldstyle, int newstyle, int tr
 	Shavit_GetStyleStrings(newstyle, sSpecialString, sStyleSpecial, sizeof(sStyleSpecial));
     bool bIsInFCStyle = (StrContains(sStyleSpecial, g_sSpecialString) != -1);
 
-    if (bIsInFCStyle && !g_bThirdPersonEnabled[client])
+    if (bIsInFCStyle && !g_bFixedCameraEnabled[client])
     {
-        EnableThirdPerson(client);
+        EnableFixedCamera(client);
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
+
+		// Retrieve player ping after 60 seconds so it has time to stabilize
+		if(!g_bHasDetectedPlayerPing[client])
+			CreateTimer(60.0, Timer_RetrievePlayerPing, GetClientSerial(client));
     }
-    else if (!bIsInFCStyle && g_bThirdPersonEnabled[client])
+    else if (!bIsInFCStyle && g_bFixedCameraEnabled[client])
     {
-        DisableThirdPerson(client);
+        DisableFixedCamera(client);
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", 0);
     }
 }
@@ -305,6 +398,8 @@ public void ConVar_OnSpecialStringChanged(ConVar convar, const char[] oldValue, 
 }
 
 // Commands ---------------------------------------------------------------------------------
+
+// Camera Rotation -----
 
 public Action Command_RotateCameraLeft(int client, int args)
 {
@@ -342,6 +437,8 @@ public Action Command_ToggleDiagonalCamera(int client, int args)
 	SaveSettingToCookie(g_cUseDiagonalCameraCookie, client, g_bUseDiagonalCamera[client]);
 	return Plugin_Handled;
 }
+
+// Other Commands -----
 
 public Action Command_ToggleHardCodedBinds(int client, int args)
 {
@@ -406,6 +503,21 @@ public Action Command_ApplyFOV(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action Command_SeePlayerPingDetection(int client, int args)
+{
+    if (!IsValidClient(client) || !IsInFCStyle(client))
+        return Plugin_Handled;
+
+	g_bSeePlayerPingDetection[client] = !g_bSeePlayerPingDetection[client];
+	SaveSettingToCookie(g_cSeePlayerPingDetectionCookie, client, g_bSeePlayerPingDetection[client]);
+
+	Shavit_PrintToChat(client, "See Player Ping: %s", g_bSeePlayerPingDetection[client] ? "\x078efeffOn" : "\x07A082FFOff");
+
+    return Plugin_Handled;
+}
+
+// Menu Commands -----
+
 public Action Command_MainMenu(int client, int args)
 {
 	if (!IsValidClient(client) || !IsInFCStyle(client))
@@ -426,6 +538,16 @@ public Action Command_CameraControlsMenu(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action Command_CameraDelayOffsetMenu(int client, int args)
+{
+	if (!IsValidClient(client) || !IsInFCStyle(client))
+		return Plugin_Handled;
+
+	ShowCameraDelayOffsetMenu(client);
+
+	return Plugin_Handled;
+}
+
 public Action Command_Help(int client, int args)
 {
 	if (!IsValidClient(client) || !IsInFCStyle(client))
@@ -438,13 +560,66 @@ public Action Command_Help(int client, int args)
 
 // Timers ----------------------------------------------------------------------------------
 
-public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
+// This is done so that if using client-side-cheats.smx, commands like 'thirdperson' on console is not abused on this style
+public Action Timer_ForceDisableCheats(Handle timer, int serial)
+{
+    int client = GetClientFromSerial(serial);
+	if (IsValidClient(client))
+		sv_cheats.ReplicateToClient(client, "0");
+
+    return Plugin_Continue;
+}
+
+public Action Timer_RetrievePlayerPing(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client))
+	{
+		// Get Player Ping for Camera Delay Offset Preset
+		int iPlayerPing = GetEntProp(GetPlayerResourceEntity(), Prop_Send, "m_iPing", _, client);
+		
+		if (iPlayerPing < 1)
+		{
+			g_iOptimizeForPingMode[client] = 0;
+			
+			if (g_bSeePlayerPingDetection[client])
+				Shavit_PrintToChat(client, "Could not detect ping for player \x07A082FF%N", client);
+
+			return Plugin_Stop;
+		}
+		else if (iPlayerPing >= g_fLowPingRangeStart && iPlayerPing < g_fMediumPingRangeStart)
+			g_iOptimizeForPingMode[client] = 1;
+		else if (iPlayerPing >= g_fMediumPingRangeStart && iPlayerPing < g_fHighPingRangeStart)
+			g_iOptimizeForPingMode[client] = 2;
+		else if (iPlayerPing >= g_fHighPingRangeStart && iPlayerPing < g_fVeryHighPingRangeStart)
+			g_iOptimizeForPingMode[client] = 3;
+		else if (iPlayerPing >= g_fVeryHighPingRangeStart && iPlayerPing < g_fUnplayablePingRangeStart)
+			g_iOptimizeForPingMode[client] = 4;
+		else if (iPlayerPing >= g_fUnplayablePingRangeStart)
+			g_iOptimizeForPingMode[client] = 5;
+
+		SaveSettingToCookie(g_cOptimizeForPingModeCookie, client, g_iOptimizeForPingMode[client]);
+
+		g_bHasDetectedPlayerPing[client] = true;
+		SaveSettingToCookie(g_cHasDetectedPlayerPingCookie, client, g_bHasDetectedPlayerPing[client]);
+
+		if (g_bSeePlayerPingDetection[client])
+			Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07A082FF%N \x07FFFFFF| Ping: \x07A082FF%dms \x07FFFFFF| Preset: \x07A082FF%d", client, iPlayerPing, g_iOptimizeForPingMode[client]);
+
+		if(g_iOptimizeForPingMode[client] > 2)
+			Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07FFFFFFWarning, your ping is too high (\x07A082FF%dms\x07FFFFFF), which will cause jump and camera rotation lag", iPlayerPing);
+	}
+
+	return Plugin_Stop;
+}
+
+public Action Timer_ReEnableFixedCamera(Handle timer, int serial)
+{
+	int client = GetClientFromSerial(serial);
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
 		SetViewAngles(client);
-		CreateTimer(0.1, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(0.2, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 
 		SetEntProp(client, Prop_Send, "m_bNightVisionOn", g_bNightVisionIsEnabled[client] ? 1 : 0);
 	}
@@ -455,15 +630,61 @@ public Action Timer_ReEnableThirdPerson(Handle timer, int serial)
 public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
+		SendConVarValue(client, g_cvMpForceCamera, "1");
 		SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
 		SetEntProp(client, Prop_Send, "m_hObserverTarget", client);
 		SetEntProp(client, Prop_Send, "m_iFOV", g_iFov[client]);
 
+		float iRefreshDelay = 0.0;
+		switch (g_iOptimizeForPingMode[client])
+		{
+			case 0: // LAN
+				iRefreshDelay = 0.005 + g_fCameraDelayOffset[client];
+			case 1: // Low Ping
+				iRefreshDelay = 0.010 + g_fCameraDelayOffset[client];
+			case 2: // Medium Ping
+				iRefreshDelay = 0.025 + g_fCameraDelayOffset[client];
+			case 3: // High Ping
+				iRefreshDelay = 0.030 + g_fCameraDelayOffset[client];
+			case 4: // Very High Ping
+				iRefreshDelay = 0.110 + g_fCameraDelayOffset[client];
+			case 5: // Unplayable Ping
+				iRefreshDelay = 0.160 + g_fCameraDelayOffset[client];
+		}
+
+		CreateTimer(iRefreshDelay + g_fCameraDelayOffset[client], Timer_RestorePlayerViewAngles, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	return Plugin_Stop;
+}
+
+public Action Timer_RestorePlayerViewAngles(Handle timer, int serial)
+{
+	int client = GetClientFromSerial(serial);
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
+	{
 		RestorePlayerViewAngles(client);
+
+		float iRefreshDelay = 0.0;
+		switch (g_iOptimizeForPingMode[client])
+		{
+			case 0: // LAN
+				iRefreshDelay = 0.010 + g_fCameraDelayOffset[client];
+			case 1: // Low Ping
+				iRefreshDelay = 0.020 + g_fCameraDelayOffset[client];
+			case 2: // Medium Ping
+				iRefreshDelay = 0.035 + g_fCameraDelayOffset[client];
+			case 3: // High Ping
+				iRefreshDelay = 0.065 + g_fCameraDelayOffset[client];
+			case 4: // Very High Ping
+				iRefreshDelay = 0.120 + g_fCameraDelayOffset[client];
+			case 5: // Unplayable Ping
+				iRefreshDelay = 0.172 + g_fCameraDelayOffset[client];
+		}
 		
-		CreateTimer(0.01, Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(iRefreshDelay + g_fCameraDelayOffset[client], Timer_ReEnableMovementKeys, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 
 	return Plugin_Stop;
@@ -472,7 +693,7 @@ public Action Timer_RefreshCameraAngle(Handle timer, int serial)
 public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
 {
 	int client = GetClientFromSerial(serial);
-	if (IsValidClient(client) && g_bThirdPersonEnabled[client])
+	if (IsValidClient(client) && g_bFixedCameraEnabled[client])
 	{
 		g_bMovementBlocked[client] = false;
 		g_bPressedHardcodedBind[client] = false;
@@ -485,6 +706,9 @@ public Action Timer_ReEnableMovementKeys(Handle timer, int serial)
 
 void RotateCameraAngle(int client, int mode)
 {
+	if (!IsPlayerAlive(client))
+		return;
+	
 	StorePlayerViewAngles(client);
     
     if (mode == 0) // Rotate Left
@@ -523,34 +747,48 @@ void RotateCameraAngle(int client, int mode)
 		g_bPressedHardcodedBind[client] = false;
 	}
 	
-	SendConVarValue(client, g_hMpForceCamera, "0");
+	SendConVarValue(client, g_cvMpForceCamera, "0");
     g_bMovementBlocked[client] = true;
     
     SetViewAngles(client);
 
-	// This is needed because for some reason when not using the hardcoded binds, it sometimes skips the vertical camera angle from SetViewAngles (wtf)
-	float iRefreshCameraDelay = 0.0;
-	if (g_bPressedHardcodedBind[client])
-		iRefreshCameraDelay = 0.035;
-	else
-		iRefreshCameraDelay = 0.042;
+	float iRefreshDelay = 0.0;
+	switch (g_iOptimizeForPingMode[client])
+	{
+		case 0: // LAN
+			iRefreshDelay = 0.010 + g_fCameraDelayOffset[client];
+		case 1: // Low Ping
+			iRefreshDelay = 0.015 + g_fCameraDelayOffset[client];
+		case 2: // Medium Ping
+			iRefreshDelay = 0.035 + g_fCameraDelayOffset[client];
+		case 3: // High Ping
+			iRefreshDelay = 0.075 + g_fCameraDelayOffset[client];
+		case 4: // Very High Ping
+			iRefreshDelay = 0.100 + g_fCameraDelayOffset[client];
+		case 5: // Unplayable Ping
+			iRefreshDelay = 0.200 + g_fCameraDelayOffset[client];
+	}
 
-    CreateTimer(iRefreshCameraDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	// This is needed because for some reason when not using the hardcoded Shift/E binds,
+	// it requires an additional delay to prevent code skipping (wtf)
+	if (!g_bPressedHardcodedBind[client])
+		iRefreshDelay += 0.010;
+
+	CreateTimer(iRefreshDelay, Timer_RefreshCameraAngle, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
 }
 
 void SetViewAngles(int client)
 {
-	float idealAngles[3];
-	idealAngles[0] = 45.0;
+	g_fFixedAngle[0] = 45.0;
 
 	if (!g_bUseDiagonalCamera[client])
-		idealAngles[1] = float(g_iCameraAngle[client]); 
+		g_fFixedAngle[1] = float(g_iCameraAngle[client]); 
 	else
-		idealAngles[1] = float(g_iCameraAngle[client] - 45);
+		g_fFixedAngle[1] = float(g_iCameraAngle[client] - 45);
 
-	idealAngles[2] = 0.0;  
-	
-	TeleportEntity(client, NULL_VECTOR, idealAngles, NULL_VECTOR);
+	g_fFixedAngle[2] = 0.0;  
+
+	TeleportEntity(client, NULL_VECTOR, g_fFixedAngle, NULL_VECTOR);
 }
 
 public void StorePlayerViewAngles(int client)
@@ -566,31 +804,32 @@ public void RestorePlayerViewAngles(int client)
     if(!IsValidClient(client))
         return;
 
-	SendConVarValue(client, g_hMpForceCamera, "1");
 	TeleportEntity(client, NULL_VECTOR, g_fStoredAngles[client], NULL_VECTOR);
 }
 
-public void EnableThirdPerson(int client)
+public void EnableFixedCamera(int client)
 {
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;
 		
-	g_bThirdPersonEnabled[client] = true;
+	g_bFixedCameraEnabled[client] = true;
 	g_iCameraAngle[client] = 0;
 
 	SDKHook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
-	CreateTimer(0.05, Timer_ReEnableThirdPerson, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(0.1, Timer_ReEnableFixedCamera, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
+
+	g_hTimerForceDisableCheats = CreateTimer(1.0, Timer_ForceDisableCheats, GetClientSerial(client), TIMER_REPEAT);
 	
 	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffPress \x07A082FFShift \x07ffffff/ \x07A082FFE \x07ffffffto rotate the camera angle");
 	Shavit_PrintToChat(client, "\x078efeffFixed Camera: \x07ffffffType \x07A082FF/fcmenu \x07fffffffor additional commands and help");
 }
 
-public void DisableThirdPerson(int client)
+public void DisableFixedCamera(int client)
 {
 	if (!IsValidClient(client) || IsFakeClient(client))
 		return;
 		
-	g_bThirdPersonEnabled[client] = false;
+	g_bFixedCameraEnabled[client] = false;
 	
 	SDKUnhook(client, SDKHook_PostThinkPost, OnClientPostThinkPost);
 	
@@ -600,6 +839,12 @@ public void DisableThirdPerson(int client)
 	
 	float resetAngles[3] = {0.0, 0.0, 0.0};
 	TeleportEntity(client, NULL_VECTOR, resetAngles, NULL_VECTOR);
+
+	if (g_hTimerForceDisableCheats != null)
+	{
+		KillTimer(g_hTimerForceDisableCheats);
+		g_hTimerForceDisableCheats = null;
+	}
 }
 
 public bool IsInFCStyle(int client)
@@ -622,11 +867,19 @@ public void SaveSettingToCookie(Cookie cookie, int client, int value)
 	cookie.Set(client, buffer);
 }
 
+public void SaveFloatSettingToCookie(Cookie cookie, int client, float value)
+{
+	char buffer[8];
+	Format(buffer, sizeof(buffer), "%f", value);
+	cookie.Set(client, buffer);
+}
+
 // Menus ------------------------------------------------------------------------
 
 void ShowMainMenu(int client)
 {
 	Menu menu = new Menu(MainMenuHandler, MENU_ACTIONS_DEFAULT);
+
 	menu.SetTitle("Fixed Camera\n \n");
 
 	menu.AddItem("camControls", "Camera Controls");
@@ -691,10 +944,8 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowCameraControlsMenu(int client)
 {
 	Menu menu = new Menu(CameraControlsMenuHandler, MENU_ACTIONS_DEFAULT);
-	
-	char title[64];
-	Format(title, sizeof(title), "Fixed Camera | Camera Controls\n \nType /fchelp for binds\n \n");
-	menu.SetTitle(title);
+
+	menu.SetTitle("Fixed Camera | Camera Controls\n \nType /fchelp for binds\n \n");
 	
 	menu.AddItem("left", "Rotate Left");
 	menu.AddItem("right", "Rotate Right");
@@ -704,7 +955,9 @@ void ShowCameraControlsMenu(int client)
 	Format(diagonalCameraStatus, sizeof(diagonalCameraStatus), "Diagonal Camera: %s\n \n", g_bUseDiagonalCamera[client] ? "On" : "Off");
 	menu.AddItem("diagonalCamera", diagonalCameraStatus);
 
-	menu.AddItem("mainMenu", "Main Menu");
+	menu.AddItem("cameraDelayOffsetMenu", "Camera Delay Offset\n \n");
+
+	menu.AddItem("mainMenu", "Back");
 	
 	menu.ExitButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
@@ -719,29 +972,112 @@ public int CameraControlsMenuHandler(Menu menu, MenuAction action, int client, i
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (g_bThirdPersonEnabled[client])
+			if (g_bFixedCameraEnabled[client])
 			{
 				if (StrEqual(info, "left"))
-				{
 					Command_RotateCameraLeft(client, 0);
-				}
 				else if (StrEqual(info, "right"))
-				{
 					Command_RotateCameraRight(client, 0);
-				}
 				else if (StrEqual(info, "180"))
-				{
 					Command_RotateCamera180(client, 0);
-				}
 				else if (StrEqual(info, "diagonalCamera"))
-				{
 					Command_ToggleDiagonalCamera(client, 0);
-				}
 
 				if (StrEqual(info, "mainMenu"))
 					ShowMainMenu(client);
+				else if (StrEqual(info, "cameraDelayOffsetMenu"))
+					ShowCameraDelayOffsetMenu(client);
 				else
-					ShowCameraControlsMenu(client);					
+					ShowCameraControlsMenu(client);
+			}
+		}
+		case MenuAction_End:
+		{
+			delete menu;
+		}
+	}
+	
+	return 0;
+}
+
+void ShowCameraDelayOffsetMenu(int client)
+{
+	Menu menu = new Menu(CameraDelayOffsetMenuHandler, MENU_ACTIONS_DEFAULT);
+	
+	menu.SetTitle("Fixed Camera | Camera Delay Offset\n \nWARNING: Only adjust this setting if you have high ping and is\nexperiencing issues when switching camera angles, such as:\n \n- Camera angle not applying properly when switching angles\n- Loosing speed when rotating the camera while holding a movement key\n \n \nCurrent Offset: %.2f\n \n", g_fCameraDelayOffset[client] + 0.001);
+	
+	menu.AddItem("increase", "++");
+	menu.AddItem("decrease", "--\n \n");
+
+	menu.AddItem("default", "Default\n \n");
+
+	char optimizeForPingMode[64];
+    switch (g_iOptimizeForPingMode[client])
+	{
+		case 0:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: LAN (Not recommended if playing on a server)\n \n");
+		case 1:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Low Ping (%.0f-%.0fms)\n \n", g_fLowPingRangeStart, g_fMediumPingRangeStart);
+		case 2:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Medium Ping (%.0f-%.0fms)\n \n", g_fMediumPingRangeStart, g_fHighPingRangeStart);
+		case 3:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: High Ping (%.0f-%.0fms)\n \n", g_fHighPingRangeStart, g_fVeryHighPingRangeStart);
+		case 4:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Very High Ping (%.0f-%.0fms)\n \n", g_fVeryHighPingRangeStart, g_fUnplayablePingRangeStart);
+		case 5:
+			Format(optimizeForPingMode, sizeof(optimizeForPingMode), "Optimize for: Unplayable Ping (%.0fms+)\n \n", g_fUnplayablePingRangeStart);
+	}
+    
+    menu.AddItem("optimizeForPingMode", optimizeForPingMode);
+
+	menu.AddItem("back", "Back");
+	
+	menu.ExitButton = true;
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int CameraDelayOffsetMenuHandler(Menu menu, MenuAction action, int client, int option)
+{
+	switch(action)
+	{
+		case MenuAction_Select:
+		{
+			char info[32];
+			menu.GetItem(option, info, sizeof(info));
+			
+			if (g_bFixedCameraEnabled[client])
+			{
+				if (StrEqual(info, "increase"))
+				{
+					if (g_fCameraDelayOffset[client] < 0.29)
+					{
+						g_fCameraDelayOffset[client] += 0.02;
+						SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
+					}
+				}
+				else if (StrEqual(info, "decrease"))
+				{
+					if (g_fCameraDelayOffset[client] > 0.01)
+					{
+						g_fCameraDelayOffset[client] -= 0.02;
+						SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
+					}
+				}
+				else if (StrEqual(info, "default"))
+				{
+					g_fCameraDelayOffset[client] = 0.0;
+					SaveFloatSettingToCookie(g_cCameraDelayOffsetCookie, client, g_fCameraDelayOffset[client]);
+				}
+				else if (StrEqual(info, "optimizeForPingMode"))
+				{
+					g_iOptimizeForPingMode[client] = (g_iOptimizeForPingMode[client] + 1) % 6;
+					SaveSettingToCookie(g_cOptimizeForPingModeCookie, client, g_iOptimizeForPingMode[client]);
+				}
+
+				if (StrEqual(info, "back"))
+					ShowCameraControlsMenu(client);
+				else
+					ShowCameraDelayOffsetMenu(client);
 			}
 		}
 		case MenuAction_End:
@@ -756,16 +1092,14 @@ public int CameraControlsMenuHandler(Menu menu, MenuAction action, int client, i
 void ShowFovMenu(int client)
 {
 	Menu menu = new Menu(FovMenuHandler, MENU_ACTIONS_DEFAULT);
-	
-	char title[64];
-	Format(title, sizeof(title), "Fixed Camera | FOV\n \nCurrent FOV: %d\n ", g_iFov[client]);
-	menu.SetTitle(title);
+
+	menu.SetTitle("Fixed Camera | FOV\n \nCurrent FOV: %d\n ", g_iFov[client]);
 	
 	menu.AddItem("increase", "++");
 	menu.AddItem("decrease", "--\n \n");
 
-	menu.AddItem("default", "Set to Default");
-	menu.AddItem("gameDefault", "Set to Game Default\n \n");
+	menu.AddItem("default", "Default");
+	menu.AddItem("gameDefault", "Game Default\n \n");
 
 	menu.AddItem("back", "Back");
 	
@@ -782,7 +1116,7 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 			char info[32];
 			menu.GetItem(option, info, sizeof(info));
 			
-			if (g_bThirdPersonEnabled[client])
+			if (g_bFixedCameraEnabled[client])
 			{
 				if (StrEqual(info, "increase"))
 				{
@@ -833,7 +1167,8 @@ public int FovMenuHandler(Menu menu, MenuAction action, int client, int option)
 void ShowHelpMenu(int client)
 {
     Menu menu = new Menu(HelpMenuHandler, MENU_ACTIONS_DEFAULT);
-    menu.SetTitle("Fixed Camera | Commands & Binds\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\nRotate Camera 180 Degrees: Bind a key to fc180\nToggle Diagonal Camera: Bind a key to fcdiagonal\n \nBind Example: bind mouse3 fc180\n \n/fcfov: Adjust FOV\n/fctogglebinds: Toggle Shift / E binds\n/fcnvg: Toggle Night Vision\n \n/fcmenu: Main Menu\n/fccamera: Camera Controls Menu\n/fchelp: This Menu\n \n");
+
+    menu.SetTitle("Fixed Camera | Commands & Binds\n \nRotate Camera: Shift / E or bind a key to fcleft / fcright\nRotate Camera 180 Degrees: Bind a key to fc180\nToggle Diagonal Camera: Bind a key to fcdiagonal\n \nBind Example: bind mouse3 fc180\n \n/fcfov: Adjust FOV\n/fctogglebinds: Toggle Shift / E binds\n/fcnvg: Toggle Night Vision\n \n/fcmenu: Main Menu\n/fccamera: Camera Controls Menu\n/fcdelay: Camera Delay Offset Menu\n/fchelp: This Menu\n \n");
 
     menu.AddItem("mainmenu", "Main Menu");
     menu.ExitButton = true;

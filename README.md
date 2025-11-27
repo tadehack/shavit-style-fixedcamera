@@ -34,6 +34,8 @@
 |-----------------|---------------|------------------------------------------|
 | `/fcmenu`       | -             | Open the Fixed Camera settings menu      |
 | `/fchelp`       | -             | Show all Fixed Camera commands and binds |
+| `/fccamera`     | -             | Opens Camera Rotation Menu               |
+| `/fcdelay `     | -             | Opens Camera Delay Offset Menu           |
 | `/fcdiagonal`   | -             | Toggle diagonal camera angle             |
 | `/fcnvg`        | -             | Toggle night vision                      |
 | `/fcfov <val>`  | -             | Set camera FOV                           |
